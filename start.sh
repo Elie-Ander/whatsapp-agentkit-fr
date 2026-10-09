@@ -34,24 +34,24 @@ if [ "$PYTHON_MAJOR" -lt 3 ] || { [ "$PYTHON_MAJOR" -eq 3 ] && [ "$PYTHON_MINOR"
 fi
 echo "  OK : $(python3 --version)"
 
-# ── Vérifier Claude Code ─────────────────────────────────────
-echo "  [2/4] Vérification de Claude Code..."
-if ! command -v claude &> /dev/null; then
-    echo ""
-    echo "  Claude Code n'est pas installé."
-    echo ""
-    echo "  Pour l'installer :"
-    echo "    npm install -g @anthropic-ai/claude-code"
-    echo ""
-    echo "  Si tu n'as pas npm/Node.js :"
-    echo "    https://nodejs.org (télécharge la version LTS)"
-    echo ""
-    echo "  Après l'installation, lance 'claude' une fois pour te connecter,"
-    echo "  puis relance : bash start.sh"
-    echo ""
-    exit 1
+# ── Chercher un assistant de code ────────────────────────────
+echo "  [2/4] Recherche d'un assistant de code..."
+ASSISTANT=""
+if command -v claude &> /dev/null; then
+    ASSISTANT="claude"
+elif command -v codex &> /dev/null; then
+    ASSISTANT="codex"
+elif command -v copilot &> /dev/null; then
+    ASSISTANT="copilot"
 fi
-echo "  OK : Claude Code est installé"
+if [ -n "$ASSISTANT" ]; then
+    echo "  OK : $ASSISTANT est installé"
+else
+    echo "  Aucun assistant trouvé en ligne de commande (claude, codex, copilot)."
+    echo "  Ce n'est pas bloquant si tu utilises un assistant dans ton éditeur."
+    echo "  Sinon, pour installer Claude Code :"
+    echo "    npm install -g @anthropic-ai/claude-code   (Node.js : https://nodejs.org)"
+fi
 
 # ── Créer les dossiers de base ───────────────────────────────
 echo "  [3/4] Préparation des dossiers..."
@@ -70,15 +70,18 @@ fi
 echo ""
 echo "==========================================================="
 echo ""
-echo "  Tout est prêt. Ouvre maintenant Claude Code :"
+echo "  Tout est prêt. Ouvre maintenant ton assistant de code dans ce dossier."
+echo ""
+echo "  Avec Claude Code :"
 echo ""
 echo "    claude"
-echo ""
-echo "  Et écris :"
-echo ""
 echo "    /creer-agent"
 echo ""
-echo "  Claude Code te guide pas à pas pour construire"
+echo "  Avec un autre assistant (Codex, GitHub Copilot...), écris-lui :"
+echo ""
+echo "    crée mon agent"
+echo ""
+echo "  Il te guide pas à pas pour construire"
 echo "  ton agent WhatsApp personnalisé avec IA."
 echo ""
 echo "  Il te faudra :"

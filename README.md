@@ -59,6 +59,12 @@ claude
 
 C'est tout. Claude Code te guide à partir de là.
 
+**Avec un autre assistant de code.** Le kit a été écrit et essayé pour Claude Code. Un
+fichier `AGENTS.md` le rend aussi lisible par les assistants qui suivent cette convention,
+comme Codex (ChatGPT) ou GitHub Copilot en mode agent : ouvre le dossier avec ton assistant
+et écris « crée mon agent ». Je ne l'ai pas encore essayé avec eux : si tu le fais, dis-moi
+ce que ça donne 😉
+
 ---
 
 ## Comment ça marche
