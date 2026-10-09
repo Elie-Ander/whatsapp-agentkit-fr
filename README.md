@@ -476,8 +476,6 @@ d'environnement sont documentées et que les liens du README répondent.
 Le passage à un humain et le pont n8n sont de moi. Le reste est basé sur un kit open source
 publié sous licence MIT : les mentions d'origine sont dans le fichier [LICENSE](LICENSE).
 
-Construit avec [Claude Code](https://claude.com/claude-code).
-
 Un souci pour l'installer, ou une question ? Je suis disponible sur
 [elie.koudujob.com](https://elie.koudujob.com) 😉
 
