@@ -1,0 +1,911 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WhatsApp AgentKit en français : ton agent WhatsApp avec IA, construit par Claude Code</title>
+<meta name="description" content="Claude Code te pose des questions sur ton entreprise et t'écrit un agent WhatsApp complet : FastAPI, Claude, mémoire par client et mise en ligne sur Railway. En moins de 30 minutes, sans écrire une ligne de code.">
+<meta name="theme-color" content="#0B1628">
+<meta property="og:title" content="WhatsApp AgentKit en français">
+<meta property="og:description" content="Ton agent WhatsApp avec IA, construit par Claude Code en moins de 30 minutes. Sans écrire une ligne de code.">
+<meta property="og:type" content="website">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Manrope:wght@400;500;700&family=Chivo+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  document.documentElement.classList.add('js');
+  window.tailwind = window.tailwind || {};
+  tailwind.config = {
+    theme: {
+      extend: {
+        colors: {
+          ink:  '#0B1628',
+          ink2: '#0E1B2E',
+          ink3: '#12213A',
+          bone: '#EEF1F5',
+          muted:'#9AA6B5',
+          accent: '#E8A33D',
+          corail:'#DC5730'
+        },
+        fontFamily: {
+          display: ['"Bricolage Grotesque"','"Helvetica Neue"','Arial','sans-serif'],
+          sans:    ['Manrope','ui-sans-serif','system-ui','-apple-system','Segoe UI','sans-serif'],
+          mono:    ['"Chivo Mono"','ui-monospace','SFMono-Regular','Menlo','Consolas','monospace']
+        }
+      }
+    }
+  };
+</script>
+<style>
+  :root{
+    --ink:#0B1628; --ink2:#0E1B2E; --ink3:#12213A;
+    --bone:#EEF1F5; --muted:#9AA6B5;
+    --accent:#E8A33D; --corail:#DC5730;
+    --line:rgba(238,241,245,.13);
+    --line-soft:rgba(238,241,245,.07);
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth; -webkit-text-size-adjust:100%}
+  body{
+    margin:0; background:var(--ink); color:var(--bone);
+    font-family:Manrope, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    font-size:16px; line-height:1.65; overflow-x:hidden;
+    -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility;
+  }
+  h1,h2,h3,h4{font-family:"Bricolage Grotesque", "Helvetica Neue", Arial, sans-serif; font-weight:800; letter-spacing:-.03em; line-height:1.02; margin:0}
+  p{margin:0}
+  a{color:inherit; text-decoration:none}
+  ::selection{background:var(--accent); color:#0B1628}
+
+  /* ── Textures de fond : papier millimétré + grain ───────────── */
+  .texture{position:fixed; inset:0; pointer-events:none; z-index:0}
+  .texture .grid{
+    position:absolute; inset:-2px;
+    background-image:
+      linear-gradient(to right, rgba(238,241,245,.05) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(238,241,245,.05) 1px, transparent 1px);
+    background-size:72px 72px;
+    -webkit-mask-image:radial-gradient(120% 80% at 50% 0%, #000 0%, rgba(0,0,0,.45) 45%, transparent 85%);
+    mask-image:radial-gradient(120% 80% at 50% 0%, #000 0%, rgba(0,0,0,.45) 45%, transparent 85%);
+  }
+  .texture .glow-a{
+    position:absolute; top:-320px; left:-180px; width:820px; height:820px; border-radius:50%;
+    background:radial-gradient(circle, rgba(232,163,61,.10) 0%, rgba(232,163,61,0) 62%); filter:blur(8px);
+  }
+  .texture .glow-b{
+    position:absolute; top:180px; right:-260px; width:720px; height:720px; border-radius:50%;
+    background:radial-gradient(circle, rgba(220,87,48,.07) 0%, rgba(220,87,48,0) 62%); filter:blur(8px);
+  }
+  .texture .grain{
+    position:absolute; inset:0; opacity:.055; mix-blend-mode:overlay;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+  .stack{position:relative; z-index:1}
+
+  /* ── Primitives ─────────────────────────────────────────────── */
+  .wrap{width:100%; max-width:1180px; margin-inline:auto; padding-inline:20px}
+  @media (min-width:768px){ .wrap{padding-inline:36px} }
+
+  .mono{font-family:"Chivo Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace}
+  .kicker{
+    font-family:"Chivo Mono", ui-monospace, Menlo, monospace; font-size:11px; letter-spacing:.22em;
+    text-transform:uppercase; color:var(--muted);
+  }
+  .kicker b{color:var(--accent); font-weight:500}
+
+  .rule{height:1px; background:linear-gradient(90deg, transparent, var(--line) 8%, var(--line) 92%, transparent)}
+
+  .panel{
+    position:relative; background:var(--ink2); border:1px solid var(--line); border-radius:3px;
+    box-shadow:inset 0 1px 0 rgba(238,241,245,.045), 0 30px 70px -40px rgba(0,0,0,.95);
+  }
+  /* repères de coin façon plan technique */
+  .ticked::before,.ticked::after{
+    content:""; position:absolute; width:10px; height:10px; pointer-events:none;
+    border-color:var(--accent); opacity:.5;
+  }
+  .ticked::before{top:-1px; left:-1px; border-top:1px solid; border-left:1px solid}
+  .ticked::after{bottom:-1px; right:-1px; border-bottom:1px solid; border-right:1px solid}
+
+  .badge{
+    display:inline-flex; align-items:center; gap:7px; padding:6px 11px; border:1px solid var(--line);
+    border-radius:2px; background:rgba(238,241,245,.02);
+    font-family:"Chivo Mono", ui-monospace, Menlo, monospace; font-size:11.5px; letter-spacing:.04em; color:var(--muted);
+    white-space:nowrap;
+  }
+  .badge b{color:var(--bone); font-weight:500}
+
+  .btn{
+    display:inline-flex; align-items:center; justify-content:center; gap:10px;
+    padding:14px 22px; border-radius:2px; font-weight:700; font-size:15px; letter-spacing:-.01em;
+    transition:transform .18s cubic-bezier(.2,.7,.2,1), box-shadow .18s, background .18s, border-color .18s;
+    border:1px solid transparent; cursor:pointer;
+  }
+  .btn-primary{background:var(--accent); color:#0B1628; box-shadow:0 0 0 rgba(232,163,61,0)}
+  .btn-primary:hover{transform:translateY(-2px); box-shadow:0 14px 34px -14px rgba(232,163,61,.6)}
+  .btn-ghost{border-color:var(--line); color:var(--bone); background:rgba(238,241,245,.015)}
+  .btn-ghost:hover{border-color:rgba(238,241,245,.32); transform:translateY(-2px)}
+
+  .lead{color:var(--muted); font-size:16.5px; line-height:1.72}
+  @media (min-width:768px){ .lead{font-size:17.5px} }
+
+  /* ── Numéros de section ─────────────────────────────────────── */
+  .sec-head{display:flex; flex-direction:column; gap:18px}
+  .sec-idx{
+    font-family:"Chivo Mono", monospace; font-size:11px; letter-spacing:.24em; color:var(--accent);
+    display:flex; align-items:center; gap:12px; text-transform:uppercase;
+  }
+  .sec-idx span{height:1px; width:56px; background:linear-gradient(90deg, var(--accent), transparent); display:block}
+  h2.sec-title{font-size:clamp(30px,5.2vw,50px)}
+
+  /* ── Terminal ───────────────────────────────────────────────── */
+  .term-bar{
+    display:flex; align-items:center; gap:10px; padding:11px 14px;
+    border-bottom:1px solid var(--line); background:rgba(238,241,245,.022);
+  }
+  .term-dot{width:9px; height:9px; border:1px solid rgba(238,241,245,.28); border-radius:1px}
+  .term-body{padding:18px 16px 20px; font-family:"Chivo Mono", ui-monospace, Menlo, monospace; font-size:13.5px; line-height:2.05}
+  @media (min-width:640px){ .term-body{padding:22px 22px 24px; font-size:14px} }
+  .term-line{display:flex; gap:11px; align-items:flex-start; word-break:break-word}
+  .term-line .p{color:var(--accent); user-select:none; flex:0 0 auto}
+  .term-line .c{color:var(--bone)}
+  .term-line .c .dim{color:var(--muted)}
+  .caret{display:inline-block; width:8px; height:16px; background:var(--accent); vertical-align:-3px; animation:blink 1.15s steps(1) infinite}
+  @keyframes blink{0%,50%{opacity:1}50.01%,100%{opacity:0}}
+
+  .copy-btn{
+    font-family:"Chivo Mono", monospace; font-size:10.5px; letter-spacing:.14em; text-transform:uppercase;
+    color:var(--muted); border:1px solid var(--line); border-radius:2px; padding:5px 9px; background:transparent;
+    cursor:pointer; transition:color .15s, border-color .15s;
+  }
+  .copy-btn:hover{color:var(--accent); border-color:rgba(232,163,61,.45)}
+
+  /* ── Bulles de chat ───────────────────────────────────────── */
+  .bubble{max-width:88%; padding:11px 14px; font-size:14.5px; line-height:1.5; border:1px solid var(--line)}
+  .bubble .t{display:block; margin-top:5px; font-family:"Chivo Mono",monospace; font-size:10px; color:var(--muted); letter-spacing:.06em}
+  .bubble-in{background:var(--ink3); border-radius:3px 12px 12px 12px; align-self:flex-start}
+  .bubble-out{
+    background:rgba(232,163,61,.09); border-color:rgba(232,163,61,.28); color:var(--bone);
+    border-radius:12px 3px 12px 12px; align-self:flex-end;
+  }
+
+  /* ── Schéma du trajet ──────────────────────────────────────── */
+  .flow{display:flex; flex-direction:column; align-items:stretch}
+  .node{
+    position:relative; background:var(--ink2); border:1px solid var(--line); border-radius:3px;
+    padding:14px 16px; text-align:left;
+  }
+  .node .n-i{font-family:"Chivo Mono",monospace; font-size:10px; letter-spacing:.2em; color:var(--accent); opacity:.85}
+  .node .n-t{font-family:"Bricolage Grotesque","Helvetica Neue",Arial,sans-serif; font-weight:700; font-size:15.5px; letter-spacing:-.02em; margin-top:6px; display:block}
+  .node .n-s{font-family:"Chivo Mono",monospace; font-size:11.5px; color:var(--muted); margin-top:4px; display:block; word-break:break-word}
+  .node.accent{border-color:rgba(232,163,61,.4); background:linear-gradient(180deg, rgba(232,163,61,.07), rgba(232,163,61,.01))}
+  .link{position:relative; display:flex; align-items:center; justify-content:center; height:34px; flex:0 0 auto}
+  .link i{position:absolute; left:50%; top:2px; bottom:2px; width:1px; margin-left:-.5px;
+          background:linear-gradient(180deg, rgba(238,241,245,.06), rgba(232,163,61,.5), rgba(238,241,245,.06))}
+  .link::after{content:""; position:absolute; left:50%; bottom:1px; margin-left:-4px;
+               border-left:4px solid transparent; border-right:4px solid transparent; border-top:5px solid rgba(232,163,61,.65)}
+  .link b{position:absolute; left:50%; margin-left:-3px; width:6px; height:6px; border-radius:50%; background:var(--accent);
+          box-shadow:0 0 12px rgba(232,163,61,.9); animation:travelY 2.6s linear infinite}
+  @keyframes travelY{0%{top:0; opacity:0}12%{opacity:1}88%{opacity:1}100%{top:calc(100% - 6px); opacity:0}}
+  @media (min-width:1024px){
+    .flow{flex-direction:row; align-items:stretch}
+    .node{flex:1 1 0; min-width:0}
+    .link{height:auto; width:44px; flex:0 0 44px}
+    .link i{left:2px; right:2px; top:50%; bottom:auto; width:auto; height:1px; margin:0; margin-top:-.5px;
+            background:linear-gradient(90deg, rgba(238,241,245,.06), rgba(232,163,61,.5), rgba(238,241,245,.06))}
+    .link::after{left:auto; right:1px; bottom:auto; top:50%; margin:-4px 0 0 0;
+                 border-left:5px solid rgba(232,163,61,.65); border-right:none;
+                 border-top:4px solid transparent; border-bottom:4px solid transparent}
+    .link b{top:50%; left:0; margin:-3px 0 0 0; animation:travelX 2.6s linear infinite}
+    @keyframes travelX{0%{left:0; opacity:0}12%{opacity:1}88%{opacity:1}100%{left:calc(100% - 6px); opacity:0}}
+  }
+  .link:nth-of-type(4) b{animation-delay:.5s}
+  .link:nth-of-type(6) b{animation-delay:1s}
+  .link:nth-of-type(8) b{animation-delay:1.5s}
+  .link:nth-of-type(10) b{animation-delay:2s}
+
+  /* ── Apparitions ──────────────────────────────────────────────── */
+  @keyframes rise{to{opacity:1; transform:none}}
+  .js .rise{opacity:0; transform:translateY(16px); animation:rise .8s cubic-bezier(.2,.75,.25,1) forwards}
+  .js .reveal{opacity:0; transform:translateY(20px); transition:opacity .75s cubic-bezier(.2,.75,.25,1), transform .75s cubic-bezier(.2,.75,.25,1)}
+  .js .reveal.in{opacity:1; transform:none}
+
+  @media (prefers-reduced-motion: reduce){
+    html{scroll-behavior:auto}
+    .js .rise,.js .reveal{opacity:1; transform:none; animation:none; transition:none}
+    .caret,.link b{animation:none}
+    .btn:hover{transform:none}
+  }
+
+  /* utilitaires */
+  .stats > div{padding:26px 4px}
+  .stats > div + div{border-left:1px solid var(--line-soft); padding-left:22px}
+  @media (max-width:767px){
+    .stats > div:nth-child(3){border-left:0; padding-left:4px}
+    .stats > div:nth-child(3),.stats > div:nth-child(4){border-top:1px solid var(--line-soft)}
+  }
+  .stats .k{font-family:"Chivo Mono",monospace; font-size:11px; letter-spacing:.2em; color:var(--muted); text-transform:uppercase}
+  .stats .v{font-family:"Bricolage Grotesque","Helvetica Neue",Arial,sans-serif; font-size:34px; font-weight:800; letter-spacing:-.03em; margin-top:6px}
+
+  .hair-top{border-top:1px solid var(--line)}
+  .link-underline{position:relative}
+  .link-underline::after{content:""; position:absolute; left:0; right:0; bottom:-3px; height:1px; background:currentColor; opacity:0; transition:opacity .2s}
+  .link-underline:hover::after{opacity:.85}
+</style>
+</head>
+<body>
+
+<div class="texture" aria-hidden="true">
+  <div class="glow-a"></div>
+  <div class="glow-b"></div>
+  <div class="grid"></div>
+  <div class="grain"></div>
+</div>
+
+<div class="stack">
+
+<!-- ══ NAV ══════════════════════════════════════════════════════ -->
+<header class="sticky top-0 z-50 backdrop-blur-md" style="background:rgba(11,22,40,.72); border-bottom:1px solid var(--line-soft)">
+  <div class="wrap flex items-center justify-between" style="height:62px">
+    <a href="#top" class="flex items-center gap-3" aria-label="WhatsApp AgentKit, accueil">
+      <svg width="26" height="26" viewBox="0 0 32 32" fill="none" style="color:var(--accent)" aria-hidden="true">
+        <rect x="2.5" y="3.5" width="27" height="21" rx="3" stroke="currentColor" stroke-width="2"/>
+        <path d="M9 24.5V30l6-5.5" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+        <path d="M10.5 10.5l4 3.5-4 3.5" stroke="#EEF1F5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M17.5 18h5.5" stroke="#EEF1F5" stroke-width="2" stroke-linecap="round"/>
+      </svg>
+      <span class="mono" style="font-size:12.5px; letter-spacing:.13em; text-transform:uppercase; color:var(--bone)">AgentKit</span>
+    </a>
+    <nav class="hidden md:flex items-center gap-8 mono" style="font-size:12px; letter-spacing:.1em; text-transform:uppercase; color:var(--muted)">
+      <a href="#comment-ca-marche" class="link-underline hover:text-bone transition-colors">Comment ça marche</a>
+      <a href="#fournisseurs" class="link-underline hover:text-bone transition-colors">Fournisseurs</a>
+      <a href="#exemples" class="link-underline hover:text-bone transition-colors">Exemples</a>
+      <a href="#a-propos" class="link-underline hover:text-bone transition-colors">À propos</a>
+    </nav>
+    <a href="https://github.com/Elie-Ander/whatsapp-agentkit-fr" class="badge" style="padding:7px 12px" target="_blank" rel="noopener">
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>
+      <b>GitHub</b>
+    </a>
+  </div>
+</header>
+
+<!-- ══ HERO ═════════════════════════════════════════════════════ -->
+<section id="top" class="wrap" style="padding-top:56px; padding-bottom:64px">
+  <div class="grid lg:grid-cols-12 gap-12 lg:gap-14 items-start lg:items-center">
+
+    <!-- colonne de gauche -->
+    <div class="lg:col-span-7">
+      <div class="kicker rise" style="animation-delay:.02s">Open source &middot; MIT &middot; <b>en français</b></div>
+
+      <h1 class="rise" style="animation-delay:.08s; font-size:clamp(44px,10.5vw,88px); margin-top:20px">
+        WhatsApp<br>
+        <span style="display:inline-block; position:relative">
+          AgentKit
+          <svg style="position:absolute; left:0; right:0; bottom:-6px; width:100%; height:12px" viewBox="0 0 300 12" preserveAspectRatio="none" aria-hidden="true">
+            <path d="M2 8.5C60 3.5 120 3 160 5.5c40 2.5 90 3.5 138 1" stroke="#E8A33D" stroke-width="3" fill="none" stroke-linecap="round"/>
+          </svg>
+        </span>
+      </h1>
+
+      <p class="lead rise" style="animation-delay:.14s; margin-top:34px; max-width:44ch">
+        Ton agent WhatsApp avec IA, construit par Claude Code en moins de 30 minutes.
+        <span style="color:var(--bone)">Sans écrire une ligne de code.</span>
+      </p>
+
+      <div class="rise flex flex-wrap gap-2.5" style="animation-delay:.2s; margin-top:26px">
+        <span class="badge"><b>100&nbsp;%</b> en français</span>
+        <span class="badge">Licence <b>MIT</b></span>
+        <span class="badge">Python <b>3.11+</b></span>
+        <span class="badge">Claude <b>Sonnet</b></span>
+      </div>
+
+      <div class="rise flex flex-wrap gap-3" style="animation-delay:.26s; margin-top:34px">
+        <a href="https://github.com/Elie-Ander/whatsapp-agentkit-fr" target="_blank" rel="noopener" class="btn btn-primary">
+          Cloner le dépôt
+          <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8h10M9 4l4 4-4 4"/></svg>
+        </a>
+        <a href="#comment-ca-marche" class="btn btn-ghost">Voir comment ça marche</a>
+      </div>
+
+      <p class="mono rise" style="animation-delay:.32s; margin-top:26px; font-size:12px; color:var(--muted); letter-spacing:.03em">
+        Pas besoin de savoir programmer. Il suffit de répondre à 10 questions sur ton entreprise.
+      </p>
+    </div>
+
+    <!-- colonne de droite : terminal + chat -->
+    <div class="lg:col-span-5 rise" style="animation-delay:.36s">
+      <div class="panel ticked">
+        <div class="term-bar">
+          <span class="term-dot"></span><span class="term-dot"></span><span class="term-dot"></span>
+          <span class="mono" style="font-size:11px; color:var(--muted); letter-spacing:.06em; margin-left:6px">~/whatsapp-agentkit-fr</span>
+          <button class="copy-btn ml-auto" id="copyBtn" type="button" data-cmd="git clone https://github.com/Elie-Ander/whatsapp-agentkit-fr.git
+cd whatsapp-agentkit-fr
+bash start.sh">copier</button>
+        </div>
+        <div class="term-body">
+          <div class="term-line"><span class="p">$</span><span class="c">git clone <span class="dim">https://github.com/Elie-Ander/whatsapp-agentkit-fr.git</span></span></div>
+          <div class="term-line"><span class="p">$</span><span class="c">cd whatsapp-agentkit-fr</span></div>
+          <div class="term-line"><span class="p">$</span><span class="c">bash start.sh</span></div>
+          <div class="term-line" style="margin-top:10px"><span class="p" style="color:var(--muted)">&gt;</span><span class="c" style="color:var(--muted)">environnement prêt. ouvre Claude et écris :</span></div>
+          <div class="term-line"><span class="p">$</span><span class="c" style="color:var(--accent)">/creer-agent<span class="caret" style="margin-left:6px"></span></span></div>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-3 mono" style="margin:18px 2px; font-size:10.5px; letter-spacing:.2em; text-transform:uppercase; color:var(--muted)">
+        <span style="flex:1; height:1px; background:var(--line)"></span>
+        30 minutes plus tard
+        <span style="flex:1; height:1px; background:var(--line)"></span>
+      </div>
+
+      <div class="panel" style="padding:16px 14px">
+        <div class="flex items-center gap-2.5" style="padding:0 2px 12px; border-bottom:1px solid var(--line-soft)">
+          <span style="width:26px; height:26px; border-radius:50%; background:linear-gradient(140deg,#E8A33D,#F08A3E); display:grid; place-items:center; color:#0B1628; font-weight:700; font-size:12px" class="mono">L</span>
+          <span style="font-weight:700; font-size:14px">Léa</span>
+          <span class="mono" style="font-size:10.5px; color:var(--accent); letter-spacing:.1em">en ligne</span>
+        </div>
+        <div class="flex flex-col gap-2.5" style="padding-top:14px">
+          <div class="bubble bubble-in">Bonjour, une table pour 4 vendredi à 21&nbsp;h&nbsp;?<span class="t">21:14</span></div>
+          <div class="bubble bubble-out">Oui, il nous en reste une en terrasse. Je la réserve à votre nom&nbsp;?<span class="t">21:14 &middot; agent</span></div>
+          <div class="bubble bubble-in">Oui, au nom de Martin<span class="t">21:15</span></div>
+          <div class="bubble bubble-out">C'est noté Martin : vendredi 21&nbsp;h, en terrasse, 4 personnes. À vendredi&nbsp;!<span class="t">21:15 &middot; agent</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══ BANDE DE CHIFFRES ════════════════════════════════════════════ -->
+<div class="wrap">
+  <div class="rule"></div>
+  <div class="stats grid grid-cols-2 md:grid-cols-4 reveal">
+    <div>
+      <div class="k">Temps total</div>
+      <div class="v">~30 min</div>
+    </div>
+    <div>
+      <div class="k">Questions</div>
+      <div class="v">10</div>
+    </div>
+    <div>
+      <div class="k">Code que tu écris</div>
+      <div class="v">0</div>
+    </div>
+    <div>
+      <div class="k">Propriétaire du code</div>
+      <div class="v">Toi</div>
+    </div>
+  </div>
+  <div class="rule"></div>
+</div>
+
+<!-- ══ 01 · COMMENT ÇA MARCHE ═══════════════════════════════════════ -->
+<section id="comment-ca-marche" class="wrap" style="padding-top:96px; padding-bottom:20px">
+  <div class="sec-head reveal" style="max-width:720px">
+    <div class="sec-idx"><span></span> 01 &middot; le processus</div>
+    <h2 class="sec-title">Cinq phases. Tu réponds, Claude Code construit.</h2>
+    <p class="lead">
+      AgentKit n'est ni une bibliothèque ni un SaaS. C'est un mode d'emploi que Claude Code lit et exécute dans ton terminal. Voici les phases, dans l'ordre, et il ne passe pas à la suivante sans ton accord.
+    </p>
+  </div>
+
+  <div style="margin-top:64px; position:relative">
+    <!-- rail vertical -->
+    <div class="hidden md:block" style="position:absolute; left:70px; top:14px; bottom:60px; width:1px; background:linear-gradient(180deg, rgba(232,163,61,.55), rgba(238,241,245,.10) 70%, transparent)"></div>
+
+    <ol style="list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:30px">
+
+      <li class="reveal" style="display:flex; gap:22px; align-items:flex-start">
+        <div style="flex:0 0 auto; width:52px; text-align:right" class="hidden md:block">
+          <span class="mono" style="font-size:12px; color:var(--muted); letter-spacing:.14em">PHASE</span>
+        </div>
+        <div style="flex:0 0 auto; position:relative; z-index:1">
+          <div style="width:38px; height:38px; border-radius:50%; border:1px solid rgba(232,163,61,.5); background:var(--ink); display:grid; place-items:center" class="mono">
+            <span style="font-size:13px; color:var(--accent); font-weight:700">01</span>
+          </div>
+        </div>
+        <div class="panel" style="flex:1; padding:20px 22px">
+          <h3 style="font-size:21px">Il vérifie ton environnement</h3>
+          <p class="lead" style="font-size:15.5px; margin-top:10px">
+            Il contrôle que tu as Python 3.11 ou plus et Claude Code installé, crée les dossiers et prépare ton <span class="mono" style="color:var(--bone); font-size:14px">.env</span> vide. S'il manque quelque chose, il te dit exactement quoi installer et où.
+          </p>
+          <div class="mono" style="margin-top:14px; font-size:12.5px; color:var(--accent)">$ bash start.sh</div>
+        </div>
+      </li>
+
+      <li class="reveal" style="display:flex; gap:22px; align-items:flex-start">
+        <div style="flex:0 0 auto; width:52px" class="hidden md:block"></div>
+        <div style="flex:0 0 auto; position:relative; z-index:1">
+          <div style="width:38px; height:38px; border-radius:50%; border:1px solid rgba(232,163,61,.5); background:var(--ink); display:grid; place-items:center" class="mono">
+            <span style="font-size:13px; color:var(--accent); font-weight:700">02</span>
+          </div>
+        </div>
+        <div class="panel" style="flex:1; padding:20px 22px">
+          <h3 style="font-size:21px">Il te pose ses questions</h3>
+          <p class="lead" style="font-size:15.5px; margin-top:10px">
+            Dix questions, une à la fois, en français : le nom de ton entreprise, ce qu'elle fait, à quoi doit servir l'agent, le nom et le ton que tu lui donnes, tes horaires, tes fichiers, tes clés API. Si tu as un PDF avec ta carte ou ta grille de prix, tu le déposes dans <span class="mono" style="color:var(--bone); font-size:14px">/knowledge</span> et il le lit.
+          </p>
+          <div class="flex flex-wrap gap-2" style="margin-top:14px">
+            <span class="badge">Nom</span><span class="badge">Activité</span><span class="badge">Cas d'usage</span>
+            <span class="badge">Ton</span><span class="badge">Horaires</span><span class="badge">Fichiers</span>
+          </div>
+        </div>
+      </li>
+
+      <li class="reveal" style="display:flex; gap:22px; align-items:flex-start">
+        <div style="flex:0 0 auto; width:52px" class="hidden md:block"></div>
+        <div style="flex:0 0 auto; position:relative; z-index:1">
+          <div style="width:38px; height:38px; border-radius:50%; border:1px solid rgba(232,163,61,.5); background:var(--ink); display:grid; place-items:center" class="mono">
+            <span style="font-size:13px; color:var(--accent); font-weight:700">03</span>
+          </div>
+        </div>
+        <div class="panel" style="flex:1; padding:20px 22px">
+          <h3 style="font-size:21px">Il génère l'agent complet</h3>
+          <p class="lead" style="font-size:15.5px; margin-top:10px">
+            Il écrit tout le projet, commenté en français, avec un system prompt taillé pour ton entreprise. Ce n'est pas un modèle à trous : chaque fichier sort différent selon tes réponses.
+          </p>
+          <div class="mono" style="margin-top:16px; font-size:12.5px; line-height:1.95; color:var(--muted); border-left:1px solid var(--line); padding-left:14px">
+            agent/main.py<span style="color:var(--muted); opacity:.6"> &middot; serveur FastAPI + webhook</span><br>
+            agent/brain.py<span style="opacity:.6"> &middot; API Claude + system prompt</span><br>
+            agent/memory.py<span style="opacity:.6"> &middot; historique par numéro</span><br>
+            agent/tools.py<span style="opacity:.6"> &middot; outils de ton métier</span><br>
+            agent/providers/<span style="opacity:.6"> &middot; connexion à WhatsApp</span><br>
+            config/prompts.yaml<span style="opacity:.6"> &middot; la personnalité</span><br>
+            Dockerfile<span style="opacity:.6"> &middot; prêt pour la production</span>
+          </div>
+        </div>
+      </li>
+
+      <li class="reveal" style="display:flex; gap:22px; align-items:flex-start">
+        <div style="flex:0 0 auto; width:52px" class="hidden md:block"></div>
+        <div style="flex:0 0 auto; position:relative; z-index:1">
+          <div style="width:38px; height:38px; border-radius:50%; border:1px solid rgba(232,163,61,.5); background:var(--ink); display:grid; place-items:center" class="mono">
+            <span style="font-size:13px; color:var(--accent); font-weight:700">04</span>
+          </div>
+        </div>
+        <div class="panel" style="flex:1; padding:20px 22px">
+          <h3 style="font-size:21px">Tu le testes dans ton terminal</h3>
+          <p class="lead" style="font-size:15.5px; margin-top:10px">
+            Avant de toucher à WhatsApp, tu parles à ton agent dans un chat simulé. Tu écris comme si tu étais un client. S'il répond quelque chose qui ne te plaît pas, tu le dis à Claude Code et il corrige sur place.
+          </p>
+          <div class="mono" style="margin-top:14px; font-size:12.5px; color:var(--accent)">$ python tests/test_local.py</div>
+        </div>
+      </li>
+
+      <li class="reveal" style="display:flex; gap:22px; align-items:flex-start">
+        <div style="flex:0 0 auto; width:52px" class="hidden md:block"></div>
+        <div style="flex:0 0 auto; position:relative; z-index:1">
+          <div style="width:38px; height:38px; border-radius:50%; border:1px solid rgba(232,163,61,.85); background:var(--accent); display:grid; place-items:center" class="mono">
+            <span style="font-size:13px; color:#0B1628; font-weight:700">05</span>
+          </div>
+        </div>
+        <div class="panel ticked" style="flex:1; padding:20px 22px; border-color:rgba(232,163,61,.28)">
+          <h3 style="font-size:21px">Mise en ligne sur Railway</h3>
+          <p class="lead" style="font-size:15.5px; margin-top:10px">
+            Tu envoies le projet sur GitHub, Railway le lance tout seul, tu renseignes les variables d'environnement et tu branches le webhook de ton fournisseur. À partir de là, celui qui t'écrit sur WhatsApp parle à ton agent, même quand ton ordinateur est éteint.
+          </p>
+        </div>
+      </li>
+
+    </ol>
+  </div>
+</section>
+
+<!-- ══ SCHÉMA : LE TRAJET D'UN MESSAGE ════════════════════════ -->
+<section class="wrap" style="padding-top:76px; padding-bottom:96px">
+  <div class="panel reveal" style="padding:26px 20px 30px; background:linear-gradient(180deg, rgba(238,241,245,.025), transparent 60%)">
+    <div class="flex flex-wrap items-baseline gap-x-4 gap-y-1" style="margin-bottom:26px">
+      <h3 class="mono" style="font-size:11px; letter-spacing:.24em; text-transform:uppercase; color:var(--accent); font-weight:500">Le trajet d'un message</h3>
+      <span class="mono" style="font-size:11.5px; color:var(--muted)">de la bulle du client à la réponse</span>
+    </div>
+
+    <div class="flow">
+      <div class="node">
+        <span class="n-i">01</span>
+        <span class="n-t">Le client écrit</span>
+        <span class="n-s">WhatsApp</span>
+      </div>
+      <div class="link" aria-hidden="true"><i></i><b></b></div>
+
+      <div class="node">
+        <span class="n-i">02</span>
+        <span class="n-t">Fournisseur</span>
+        <span class="n-s">Zernio ou Meta</span>
+      </div>
+      <div class="link" aria-hidden="true"><i></i><b></b></div>
+
+      <div class="node">
+        <span class="n-i">03</span>
+        <span class="n-t">Webhook</span>
+        <span class="n-s">POST /webhook &middot; main.py</span>
+      </div>
+      <div class="link" aria-hidden="true"><i></i><b></b></div>
+
+      <div class="node">
+        <span class="n-i">04</span>
+        <span class="n-t">Mémoire</span>
+        <span class="n-s">memory.py &middot; SQLite</span>
+      </div>
+      <div class="link" aria-hidden="true"><i></i><b></b></div>
+
+      <div class="node accent">
+        <span class="n-i">05</span>
+        <span class="n-t">Cerveau</span>
+        <span class="n-s">brain.py &middot; Claude</span>
+      </div>
+      <div class="link" aria-hidden="true"><i></i><b></b></div>
+
+      <div class="node">
+        <span class="n-i">06</span>
+        <span class="n-t">Réponse</span>
+        <span class="n-s">retour dans le chat</span>
+      </div>
+    </div>
+
+    <p class="mono" style="margin-top:24px; font-size:11.5px; color:var(--muted); line-height:1.9">
+      L'historique est récupéré avant d'appeler le modèle : l'agent se souvient ainsi de ce que vous vous êtes dit hier. Chaque numéro de téléphone a sa propre conversation.
+    </p>
+  </div>
+</section>
+
+<!-- ══ 02 · FOURNISSEURS ═════════════════════════════════════════ -->
+<section id="fournisseurs" class="wrap" style="padding-bottom:96px">
+  <div class="sec-head reveal" style="max-width:760px">
+    <div class="sec-idx"><span></span> 02 &middot; connexion à whatsapp</div>
+    <h2 class="sec-title">Deux chemins pour connecter ton numéro.</h2>
+    <p class="lead">
+      Ton agent doit pouvoir parler à WhatsApp. Claude Code te demande lequel tu veux et génère uniquement l'adaptateur de ce fournisseur, avec ses variables d'environnement. Tu peux changer plus tard sans toucher au reste du code.
+    </p>
+  </div>
+
+  <div class="grid lg:grid-cols-2 gap-6" style="margin-top:52px">
+
+    <!-- ZERNIO -->
+    <div class="panel ticked reveal" style="padding:0; border-color:rgba(232,163,61,.32); overflow:hidden">
+      <div style="height:3px; background:linear-gradient(90deg, var(--accent), rgba(232,163,61,.05))"></div>
+      <div style="padding:26px 24px 28px">
+        <div class="flex items-center justify-between gap-4" style="margin-bottom:18px">
+          <span class="mono" style="font-size:10.5px; letter-spacing:.2em; text-transform:uppercase; color:#0B1628; background:var(--accent); padding:5px 10px; border-radius:2px; font-weight:700">Recommandé</span>
+          <span class="mono" style="font-size:11px; color:var(--muted)">option A</span>
+        </div>
+        <h3 style="font-size:30px">Zernio</h3>
+        <p class="lead" style="font-size:15.5px; margin-top:12px">
+          Intégration directe sur la WhatsApp Cloud API de Meta, avec l'Embedded Signup déjà réglé : tu connectes ton compte WhatsApp Business depuis un bouton. Sans créer d'application Facebook et sans passer l'App Review. Avec une boîte de réception unifiée et des webhooks signés.
+        </p>
+
+        <div style="margin-top:22px; border-top:1px solid var(--line-soft)">
+          <div class="flex gap-4" style="padding:13px 0; border-bottom:1px solid var(--line-soft)">
+            <span class="mono" style="flex:0 0 106px; font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--muted)">Difficulté</span>
+            <span style="font-size:14.5px">Faible. La connexion prend quelques minutes.</span>
+          </div>
+          <div class="flex gap-4" style="padding:13px 0; border-bottom:1px solid var(--line-soft)">
+            <span class="mono" style="flex:0 0 106px; font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--muted)">Coût</span>
+            <span style="font-size:14.5px">Les 2 premiers comptes connectés sont gratuits. Sans carte bancaire.</span>
+          </div>
+          <div class="flex gap-4" style="padding:13px 0; border-bottom:1px solid var(--line-soft)">
+            <span class="mono" style="flex:0 0 106px; font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--muted)">Pour qui</span>
+            <span style="font-size:14.5px">Pour presque tout le monde. Si tu veux ton agent en marche aujourd'hui, c'est par ici.</span>
+          </div>
+          <div class="flex gap-4" style="padding:13px 0">
+            <span class="mono" style="flex:0 0 106px; font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--muted)">Sans numéro</span>
+            <span style="font-size:14.5px">Il a un bac à sable avec un numéro partagé pour tester avant d'avoir le tien : 50 messages par 24 heures, gratuit, et la session dure 7 jours.</span>
+          </div>
+        </div>
+
+        <div class="mono" style="margin-top:20px; font-size:12px; color:var(--muted); background:rgba(238,241,245,.025); border:1px solid var(--line-soft); border-radius:2px; padding:13px 14px; line-height:1.95; word-break:break-all">
+          WHATSAPP_PROVIDER=<span style="color:var(--accent)">zernio</span><br>
+          ZERNIO_API_KEY=<span style="opacity:.6">...</span><br>
+          ZERNIO_WEBHOOK_SECRET=<span style="opacity:.6">...</span><br>
+          ZERNIO_ACCOUNT_ID=<span style="opacity:.6">... (optionnel)</span>
+        </div>
+
+        <a href="https://zernio.com" target="_blank" rel="noopener" class="btn btn-primary" style="margin-top:22px; width:100%">
+          Aller sur zernio.com
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12L12 4M6 4h6v6"/></svg>
+        </a>
+      </div>
+    </div>
+
+    <!-- META -->
+    <div class="panel reveal" style="padding:0; overflow:hidden">
+      <div style="height:3px; background:linear-gradient(90deg, rgba(238,241,245,.35), rgba(238,241,245,.03))"></div>
+      <div style="padding:26px 24px 28px">
+        <div class="flex items-center justify-between gap-4" style="margin-bottom:18px">
+          <span class="mono" style="font-size:10.5px; letter-spacing:.2em; text-transform:uppercase; color:var(--muted); border:1px solid var(--line); padding:5px 10px; border-radius:2px">Avancé</span>
+          <span class="mono" style="font-size:11px; color:var(--muted)">option B</span>
+        </div>
+        <h3 style="font-size:30px">Meta Cloud API en direct</h3>
+        <p class="lead" style="font-size:15.5px; margin-top:12px">
+          L'API officielle de WhatsApp, sans rien au milieu. Tu crées l'application sur developers.facebook.com, tu lui ajoutes le produit WhatsApp, tu génères le jeton permanent et tu fais vérifier ton compte Facebook Business.
+        </p>
+
+        <div style="margin-top:22px; border-top:1px solid var(--line-soft)">
+          <div class="flex gap-4" style="padding:13px 0; border-bottom:1px solid var(--line-soft)">
+            <span class="mono" style="flex:0 0 106px; font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--muted)">Difficulté</span>
+            <span style="font-size:14.5px">Élevée. Application Facebook, jetons, vérification Business.</span>
+          </div>
+          <div class="flex gap-4" style="padding:13px 0; border-bottom:1px solid var(--line-soft)">
+            <span class="mono" style="flex:0 0 106px; font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--muted)">Coût</span>
+            <span style="font-size:14.5px">Tu paies les conversations à Meta, directement et sans intermédiaire.</span>
+          </div>
+          <div class="flex gap-4" style="padding:13px 0; border-bottom:1px solid var(--line-soft)">
+            <span class="mono" style="flex:0 0 106px; font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--muted)">Pour qui</span>
+            <span style="font-size:14.5px">Si tu as déjà l'application et le Business vérifié, ou si tu veux maîtriser chaque pièce toi-même.</span>
+          </div>
+          <div class="flex gap-4" style="padding:13px 0">
+            <span class="mono" style="flex:0 0 106px; font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--muted)">Sans numéro</span>
+            <span style="font-size:14.5px">Meta fournit un numéro de test, mais il te faut quand même l'application créée.</span>
+          </div>
+        </div>
+
+        <div class="mono" style="margin-top:20px; font-size:12px; color:var(--muted); background:rgba(238,241,245,.025); border:1px solid var(--line-soft); border-radius:2px; padding:13px 14px; line-height:1.95; word-break:break-all">
+          WHATSAPP_PROVIDER=<span style="color:var(--bone)">meta</span><br>
+          META_ACCESS_TOKEN=<span style="opacity:.6">...</span><br>
+          META_PHONE_NUMBER_ID=<span style="opacity:.6">...</span><br>
+          META_VERIFY_TOKEN=<span style="opacity:.6">...</span><br>
+          META_APP_SECRET=<span style="opacity:.6">...</span><br>
+          META_API_VERSION=<span style="opacity:.6">v25.0</span>
+        </div>
+
+        <a href="https://developers.facebook.com/docs/whatsapp/cloud-api" target="_blank" rel="noopener" class="btn btn-ghost" style="margin-top:22px; width:100%">
+          Documentation de Meta
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12L12 4M6 4h6v6"/></svg>
+        </a>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ══ 03 · EXEMPLES D'USAGE ════════════════════════════════════════ -->
+<section id="exemples" class="wrap" style="padding-bottom:100px">
+  <div class="sec-head reveal" style="max-width:720px">
+    <div class="sec-idx"><span></span> 03 &middot; à quoi ça sert</div>
+    <h2 class="sec-title">Le même moteur, un autre métier.</h2>
+    <p class="lead">
+      Ce qui change d'un agent à l'autre, ce n'est pas le code : c'est le prompt, les outils et les fichiers que tu lui as donnés. Voici les métiers où il sert le plus.
+    </p>
+  </div>
+
+  <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-5" style="margin-top:52px">
+
+    <div class="panel reveal" style="padding:24px 22px 26px">
+      <span class="mono" style="font-size:10.5px; letter-spacing:.2em; color:var(--accent)">01</span>
+      <h3 style="font-size:22px; margin-top:12px">Restaurant</h3>
+      <p class="lead" style="font-size:15px; margin-top:10px">
+        Il prend les commandes, lit la carte dans le PDF que tu as déposé, compose le panier, confirme l'adresse et l'heure de livraison.
+      </p>
+      <div style="margin-top:18px; border-left:2px solid rgba(232,163,61,.5); padding-left:12px">
+        <p style="font-size:14px; color:var(--muted); font-style:italic">« Deux pizzas margherita et une limonade, à emporter »</p>
+      </div>
+    </div>
+
+    <div class="panel reveal" style="padding:24px 22px 26px">
+      <span class="mono" style="font-size:10.5px; letter-spacing:.2em; color:var(--accent)">02</span>
+      <h3 style="font-size:22px; margin-top:12px">Cabinet ou salon</h3>
+      <p class="lead" style="font-size:15px; margin-top:10px">
+        Il prend le rendez-vous : il demande la prestation, propose les créneaux que tu lui as donnés et te laisse les informations prêtes dans l'historique.
+      </p>
+      <div style="margin-top:18px; border-left:2px solid rgba(232,163,61,.5); padding-left:12px">
+        <p style="font-size:14px; color:var(--muted); font-style:italic">« Vous avez de la place jeudi après-midi&nbsp;? »</p>
+      </div>
+    </div>
+
+    <div class="panel reveal" style="padding:24px 22px 26px">
+      <span class="mono" style="font-size:10.5px; letter-spacing:.2em; color:var(--accent)">03</span>
+      <h3 style="font-size:22px; margin-top:12px">Agence immobilière</h3>
+      <p class="lead" style="font-size:15px; margin-top:10px">
+        Il qualifie les prospects : il demande le quartier, le budget et la date d'emménagement souhaitée. Les tièdes, il les entretient. Les bons, il les passe au commercial.
+      </p>
+      <div style="margin-top:18px; border-left:2px solid rgba(232,163,61,.5); padding-left:12px">
+        <p style="font-size:14px; color:var(--muted); font-style:italic">« Je cherche un deux-pièces, jusqu'à 900 euros »</p>
+      </div>
+    </div>
+
+    <div class="panel reveal" style="padding:24px 22px 26px">
+      <span class="mono" style="font-size:10.5px; letter-spacing:.2em; color:var(--accent)">04</span>
+      <h3 style="font-size:22px; margin-top:12px">Boutique en ligne</h3>
+      <p class="lead" style="font-size:15px; margin-top:10px">
+        Il répond sur le stock, les tailles, les moyens de paiement, les frais de livraison et le suivi de commande. À 3 heures du matin aussi.
+      </p>
+      <div style="margin-top:18px; border-left:2px solid rgba(232,163,61,.5); padding-left:12px">
+        <p style="font-size:14px; color:var(--muted); font-style:italic">« Il vous reste la veste noire en M&nbsp;? »</p>
+      </div>
+    </div>
+
+    <div class="panel reveal" style="padding:24px 22px 26px">
+      <span class="mono" style="font-size:10.5px; letter-spacing:.2em; color:var(--accent)">05</span>
+      <h3 style="font-size:22px; margin-top:12px">SaaS et support</h3>
+      <p class="lead" style="font-size:15px; margin-top:10px">
+        Premier niveau de support : il règle ce qui revient tout le temps, ouvre un ticket quand il le faut et passe à un humain ce qu'il ne sait pas, sans inventer.
+      </p>
+      <div style="margin-top:18px; border-left:2px solid rgba(232,163,61,.5); padding-left:12px">
+        <p style="font-size:14px; color:var(--muted); font-style:italic">« Je ne reçois pas le mail de vérification »</p>
+      </div>
+    </div>
+
+    <div class="panel ticked reveal" style="padding:24px 22px 26px; background:linear-gradient(160deg, rgba(220,87,48,.07), transparent 65%); border-color:rgba(220,87,48,.28)">
+      <span class="mono" style="font-size:10.5px; letter-spacing:.2em; color:var(--corail)">06</span>
+      <h3 style="font-size:22px; margin-top:12px">Toute autre entreprise</h3>
+      <p class="lead" style="font-size:15px; margin-top:10px">
+        Si tu réponds vingt fois par jour aux mêmes questions, l'agent y répond à ta place avec tes informations, ton ton et tes horaires. Rien de plus.
+      </p>
+      <div style="margin-top:18px; border-left:2px solid rgba(220,87,48,.55); padding-left:12px">
+        <p style="font-size:14px; color:var(--muted); font-style:italic">« Vous êtes ouverts jusqu'à quelle heure aujourd'hui&nbsp;? »</p>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ══ 04 · À PROPOS ═══════════════════════════════════════════════ -->
+<section id="a-propos" class="wrap" style="padding-bottom:100px">
+  <div class="rule" style="margin-bottom:76px"></div>
+
+  <div class="grid lg:grid-cols-12 gap-12">
+    <div class="lg:col-span-5 reveal">
+      <div class="sec-idx" style="margin-bottom:18px"><span></span> 04 &middot; qui et pourquoi</div>
+      <h2 class="sec-title" style="font-size:clamp(30px,4.6vw,44px)">Ce dépôt ne contient presque pas de code.</h2>
+      <div class="panel" style="margin-top:28px; padding:20px 22px">
+        <div class="mono" style="font-size:11px; letter-spacing:.18em; text-transform:uppercase; color:var(--muted)">Ce qu'il y a dedans</div>
+        <div class="mono" style="margin-top:12px; font-size:13px; line-height:2.1; color:var(--bone)">
+          CLAUDE.md <span style="color:var(--muted)">&middot; le cerveau</span><br>
+          /creer-agent <span style="color:var(--muted)">&middot; le déclencheur</span><br>
+          start.sh <span style="color:var(--muted)">&middot; le démarrage</span><br>
+          scripts/audit.py <span style="color:var(--muted)">&middot; l'audit</span><br>
+          README.md <span style="color:var(--muted)">&middot; le plan</span><br>
+          LICENSE <span style="color:var(--muted)">&middot; MIT</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="lg:col-span-7 reveal" style="display:flex; flex-direction:column; gap:20px">
+      <p class="lead" style="font-size:18px; color:var(--bone)">
+        Mettre un agent WhatsApp dans une petite entreprise, jusqu'ici, c'était payer un développeur ou s'abonner à un outil qui répond avec des boutons.
+      </p>
+      <p class="lead">
+        Ce kit prend le problème autrement : au lieu d'un bot de plus, il contient les instructions pour que Claude Code écrive le tien. Tout le travail tient dans un fichier, <span class="mono" style="color:var(--bone); font-size:15px">CLAUDE.md</span>&nbsp;: quoi demander, dans quel ordre, quoi générer à chaque réponse, comment tester et comment mettre en ligne. Tu clones, tu lances une commande et tu réponds. Le code apparaît.
+      </p>
+      <p class="lead">
+        L'important : l'agent qui en sort est à toi. Il vit sur ta machine, dans ton dépôt, avec tes clés API. Tu peux le lire, le casser, changer son prompt à trois heures du matin. Pas de plateforme au milieu, pas d'abonnement, rien qui s'éteigne si l'auteur disparaît. Licence MIT, fais-en ce que tu veux.
+      </p>
+      <p class="lead">
+        Je m'appelle <span style="color:var(--bone)">Elie LISSODA</span>. J'ai adapté ce kit open source en français pour que les indépendants et les petites entreprises francophones puissent s'en servir. Un souci pour l'installer, ou une question ? Je suis disponible 😉
+      </p>
+
+      <div class="flex flex-wrap gap-3" style="margin-top:8px">
+        <a href="https://elie.koudujob.com" target="_blank" rel="noopener" class="btn btn-ghost">elie.koudujob.com</a>
+        <a href="https://github.com/Elie-Ander/n8n-workflows" target="_blank" rel="noopener" class="btn btn-ghost">Mes workflows n8n</a>
+        <a href="https://github.com/Elie-Ander/whatsapp-agentkit-fr/blob/main/LICENSE" target="_blank" rel="noopener" class="btn btn-ghost">Licence MIT</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══ APPEL FINAL ════════════════════════════════════════════════ -->
+<section class="wrap" style="padding-bottom:90px">
+  <div class="panel ticked reveal" style="padding:52px 24px 56px; text-align:center; background:radial-gradient(120% 140% at 50% 0%, rgba(232,163,61,.09), transparent 62%)">
+    <div class="kicker" style="justify-content:center">trois commandes et tu y es</div>
+    <h2 class="sec-title" style="font-size:clamp(32px,6vw,58px); margin-top:18px; max-width:16ch; margin-inline:auto">
+      Ton agent commence par un git clone.
+    </h2>
+
+    <div class="panel" style="max-width:560px; margin:32px auto 0; text-align:left; background:var(--ink)">
+      <div class="term-bar">
+        <span class="term-dot"></span><span class="term-dot"></span><span class="term-dot"></span>
+        <button class="copy-btn ml-auto" type="button" data-cmd="git clone https://github.com/Elie-Ander/whatsapp-agentkit-fr.git
+cd whatsapp-agentkit-fr
+bash start.sh">copier</button>
+      </div>
+      <div class="term-body">
+        <div class="term-line"><span class="p">$</span><span class="c">git clone <span class="dim">https://github.com/Elie-Ander/whatsapp-agentkit-fr.git</span></span></div>
+        <div class="term-line"><span class="p">$</span><span class="c">cd whatsapp-agentkit-fr</span></div>
+        <div class="term-line"><span class="p">$</span><span class="c">bash start.sh</span></div>
+      </div>
+    </div>
+
+    <div class="flex flex-wrap gap-3 justify-center" style="margin-top:30px">
+      <a href="https://github.com/Elie-Ander/whatsapp-agentkit-fr" target="_blank" rel="noopener" class="btn btn-primary">
+        Voir le dépôt sur GitHub
+        <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8h10M9 4l4 4-4 4"/></svg>
+      </a>
+      <a href="https://github.com/Elie-Ander/whatsapp-agentkit-fr/fork" target="_blank" rel="noopener" class="btn btn-ghost">Faire un fork</a>
+    </div>
+
+    <p class="mono" style="margin-top:26px; font-size:11.5px; color:var(--muted); letter-spacing:.04em">
+      Il te faut : Python 3.11+, Claude Code et une clé API Anthropic.
+    </p>
+  </div>
+</section>
+
+<!-- ══ PIED DE PAGE ═══════════════════════════════════════════════════ -->
+<footer class="hair-top">
+  <div class="wrap" style="padding-top:44px; padding-bottom:52px">
+    <div class="flex flex-col md:flex-row md:items-end justify-between gap-8">
+      <div>
+        <div class="flex items-center gap-3">
+          <svg width="24" height="24" viewBox="0 0 32 32" fill="none" style="color:var(--accent)" aria-hidden="true">
+            <rect x="2.5" y="3.5" width="27" height="21" rx="3" stroke="currentColor" stroke-width="2"/>
+            <path d="M9 24.5V30l6-5.5" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+            <path d="M10.5 10.5l4 3.5-4 3.5" stroke="#EEF1F5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M17.5 18h5.5" stroke="#EEF1F5" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+          <span class="font-display" style="font-size:19px; font-weight:800; letter-spacing:-.02em">WhatsApp AgentKit</span>
+        </div>
+        <p class="mono" style="margin-top:14px; font-size:11.5px; color:var(--muted); line-height:1.9">
+          Elie LISSODA &middot; Automatisation marketing et IA<br>
+          Code ouvert sous licence MIT
+        </p>
+      </div>
+
+      <nav class="flex flex-wrap gap-x-7 gap-y-3 mono" style="font-size:12px; letter-spacing:.1em; text-transform:uppercase; color:var(--muted)">
+        <a href="https://github.com/Elie-Ander/whatsapp-agentkit-fr" target="_blank" rel="noopener" class="link-underline hover:text-bone transition-colors">GitHub</a>
+        <a href="https://elie.koudujob.com" target="_blank" rel="noopener" class="link-underline hover:text-bone transition-colors">Portfolio</a>
+        <a href="https://zernio.com" target="_blank" rel="noopener" class="link-underline hover:text-bone transition-colors">Zernio</a>
+        <a href="https://github.com/Elie-Ander/whatsapp-agentkit-fr/blob/main/LICENSE" target="_blank" rel="noopener" class="link-underline hover:text-bone transition-colors">MIT</a>
+      </nav>
+    </div>
+  </div>
+</footer>
+
+</div><!-- /stack -->
+
+<script>
+(function(){
+  // ── Copier les commandes de démarrage ───────────────────────────
+  document.querySelectorAll('.copy-btn').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      var texte = btn.getAttribute('data-cmd') || '';
+      var pret = function(){
+        var avant = btn.textContent;
+        btn.textContent = 'copié';
+        btn.style.color = '#E8A33D';
+        setTimeout(function(){ btn.textContent = avant; btn.style.color = ''; }, 1600);
+      };
+      if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(texte).then(pret).catch(function(){ fallback(texte, pret); });
+      } else {
+        fallback(texte, pret);
+      }
+    });
+  });
+
+  // Solution de repli pour file://, où le presse-papiers moderne n'existe pas
+  function fallback(texte, ok){
+    var ta = document.createElement('textarea');
+    ta.value = texte;
+    ta.setAttribute('readonly','');
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand('copy'); ok(); } catch(e) {}
+    document.body.removeChild(ta);
+  }
+
+  // ── Apparition au défilement ─────────────────────────────────
+  var elements = document.querySelectorAll('.reveal');
+  function toutMontrer(){ elements.forEach(function(el){ el.classList.add('in'); }); }
+
+  // Filet de sécurité : quoi qu'il arrive, au bout de 2,5 s tout est visible.
+  setTimeout(toutMontrer, 2500);
+
+  if (!('IntersectionObserver' in window)) { toutMontrer(); return; }
+  var obs = new IntersectionObserver(function(entrees){
+    entrees.forEach(function(e){
+      if (e.isIntersecting) {
+        e.target.classList.add('in');
+        obs.unobserve(e.target);
+      }
+    });
+  }, { rootMargin: '0px 0px -8% 0px', threshold: 0.06 });
+
+  elements.forEach(function(el, i){
+    el.style.transitionDelay = (Math.min(i, 4) * 60) + 'ms';
+    obs.observe(el);
+  });
+})();
+</script>
+
+</body>
+</html>
