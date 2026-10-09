@@ -457,6 +457,9 @@ QUESTION 12 : Utilises-tu n8n ?
                          et ta valeur secrète → N8N_WEBHOOK_SECRET
                       4. Active le workflow
 
+                      Pour aller plus vite, un workflow prêt à importer existe :
+                      https://github.com/Elie-Ander/n8n-workflows/tree/main/agent-whatsapp
+
                       S'il n'a PAS configuré Telegram à la question 11, préviens-le :
                       « Sans Telegram, c'est ton workflow n8n qui doit t'alerter quand l'agent
                       passe la main : il reçoit alors l'événement demande_humain. Veux-tu que

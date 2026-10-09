@@ -188,6 +188,9 @@ Sheets, une fiche dans ton CRM ou dans Notion, un message à ton équipe.
 | `echange` | Après chaque réponse de l'agent | `date`, `telephone`, `message_client`, `reponse_agent` |
 | `demande_humain` | Quand l'agent passe la main | les mêmes, plus `pause_heures` |
 
+Un workflow prêt à importer reçoit ces deux événements, range chaque échange dans une table
+et t'alerte sur Telegram : [Agent WhatsApp : conversations et alertes](https://github.com/Elie-Ander/n8n-workflows/tree/main/agent-whatsapp).
+
 Si n8n est en panne, tes clients ne le voient pas : l'agent répond d'abord, il transmet
 ensuite. Tu peux aussi recevoir les alertes par n8n plutôt que par Telegram : ton workflow
 traite alors l'événement `demande_humain`.
@@ -425,7 +428,9 @@ un faux Claude, un faux WhatsApp, un faux n8n et un faux Telegram : signature, d
 mémoire, panne de Claude, alerte, pause et reprise, pannes de n8n et de Telegram, aucun
 secret dans les journaux. 44 vérifications par fournisseur.
 
-**Statut : testé en simulation.** Le premier lancement avec de vrais comptes reste à faire.
+**Statut : testé en simulation, et le pont n8n pour de vrai.** Le code du kit a envoyé les
+deux événements à un vrai workflow n8n, qui les a rangés et a déclenché l'alerte. Le premier
+lancement complet, avec un vrai numéro WhatsApp, reste à faire.
 
 ---
 
