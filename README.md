@@ -72,9 +72,10 @@ Il contrôle Python 3.11+, crée les dossiers, installe les dépendances et pré
 
 ### Phase 2 : il te pose ses questions
 
-Dix questions, une par une : le nom de ton entreprise, ce qu'elle fait, à quoi doit servir
-l'agent, comment il s'appelle, quel ton il adopte, tes horaires, tes fichiers de prix ou
-ta carte, ta clé API Anthropic et le service qui te connecte à WhatsApp.
+Douze questions, une par une : le nom de ton entreprise, ce qu'elle fait, à quoi doit
+servir l'agent, comment il s'appelle, quel ton il adopte, tes horaires, tes fichiers de prix
+ou ta carte, ta clé API Anthropic, le service qui te connecte à WhatsApp, puis deux
+réglages au choix : être prévenu quand l'agent passe la main, et relier l'agent à n8n.
 
 ### Phase 3 : il construit l'agent
 
@@ -85,7 +86,9 @@ ton-projet/
 ├── agent/
 │   ├── main.py              Serveur qui reçoit les messages WhatsApp
 │   ├── brain.py             Connexion à Claude : le cerveau
-│   ├── memory.py            Historique de chaque client + déduplication des événements
+│   ├── memory.py            Historique de chaque client, doublons, conversations en pause
+│   ├── humain.py            Passage à un humain : alerte + pause de l'agent
+│   ├── n8n.py               Pont vers n8n : chaque échange part vers ton workflow
 │   ├── tools.py             Outils propres à ton entreprise
 │   └── providers/           Connexion à ton service WhatsApp
 │       ├── base.py          Interface commune
@@ -154,6 +157,37 @@ Passer de l'un à l'autre plus tard tient en une phrase : ouvre Claude Code et d
 
 ---
 
+## Passage à un humain et pont n8n
+
+Deux fonctions optionnelles. Sans réglage, l'agent répond seul.
+
+**Passage à un humain.** Un agent qui ne sait pas doit passer la main, pas tourner en
+rond. Quand il ne peut pas répondre, ou que le client demande quelqu'un :
+
+1. il dit au client qu'une personne de l'équipe reprend la conversation ;
+2. il t'envoie une alerte sur Telegram, avec le numéro du client et son message ;
+3. il se tait sur cette conversation pendant 12 heures (durée réglable), le temps que tu
+   répondes toi-même depuis la boîte de réception de ton fournisseur.
+
+Les autres clients continuent d'être servis. Si l'alerte ne part pas, l'agent ne se met
+pas en pause : un client n'est jamais laissé sans personne. Le bot Telegram se crée en deux
+minutes avec @BotFather, Claude Code te guide.
+
+**Pont n8n.** Chaque échange part vers un de tes workflows [n8n](https://n8n.io), par un
+nœud Webhook protégé par un secret. De là, tu fais ce que tu veux : une ligne dans Google
+Sheets, une fiche dans ton CRM ou dans Notion, un message à ton équipe.
+
+| Événement reçu par n8n | Quand | Champs |
+|---|---|---|
+| `echange` | Après chaque réponse de l'agent | `date`, `telephone`, `message_client`, `reponse_agent` |
+| `demande_humain` | Quand l'agent passe la main | les mêmes, plus `pause_heures` |
+
+Si n8n est en panne, tes clients ne le voient pas : l'agent répond d'abord, il transmet
+ensuite. Tu peux aussi recevoir les alertes par n8n plutôt que par Telegram : ton workflow
+traite alors l'événement `demande_humain`.
+
+---
+
 ## Ce qui se passe quand un client écrit
 
 ```
@@ -175,6 +209,9 @@ memory.py : cet événement a-t-il déjà été traité ? → si oui, on l'écar
 main.py répond 200 TOUT DE SUITE et met le travail en file d'attente
          │
          ▼  ──────── hors du cycle du webhook ────────
+memory.py : une personne a-t-elle repris la conversation ? → si oui, l'agent se tait
+         │
+         ▼
 memory.py retrouve l'historique de CE client
          │
          ▼
@@ -185,6 +222,10 @@ providers/ envoie la réponse sur WhatsApp
          │
          ▼
 Le client reçoit la réponse en quelques secondes
+         │
+         ▼  ──────── une fois le client servi ────────
+humain.py : si l'agent passe la main, alerte Telegram et mise en pause
+n8n.py : sinon, l'échange part vers ton workflow n8n
 ```
 
 Trois choix de conception qui comptent :
@@ -247,6 +288,8 @@ facturent en dollars, et leurs tarifs bougent : vérifie-les sur leur site avant
 | Zernio | Les 2 premiers comptes connectés sont gratuits, sans carte bancaire. Si tu connectes ton propre numéro WhatsApp Business, le coût s'arrête là. Si tu demandes un numéro à Zernio, compte entre 3 $ et 21 $ par mois selon le pays |
 | Meta Cloud API | Les conversations ouvertes par le client sont gratuites. Tu ne paies que celles que tu lances toi-même avec un modèle de message |
 | API Claude | À l'usage. Voir le calcul plus bas |
+| Telegram (alertes) | Gratuit |
+| n8n | Optionnel. Gratuit si tu l'héberges toi-même, payant en version cloud |
 | Railway | Il n'y a plus de vraie offre gratuite : tu démarres avec 5 $ de crédit d'essai, puis l'offre Hobby coûte 5 $ par mois |
 
 ### Choisir le modèle de Claude
@@ -342,7 +385,9 @@ claude "Je veux migrer de Zernio vers Meta Cloud API."
 | IA | Claude (`claude-sonnet-5` par défaut) | Génère les réponses |
 | Serveur | FastAPI + Uvicorn | Reçoit les webhooks de WhatsApp |
 | WhatsApp | Zernio / Meta Cloud API | Relie l'agent à WhatsApp, au choix |
-| Base de données | SQLite en local / PostgreSQL en production | Historique et déduplication |
+| Base de données | SQLite en local / PostgreSQL en production | Historique, déduplication, pauses |
+| Alertes | Bot Telegram | Te prévient quand l'agent passe la main |
+| Automatisation | n8n, par un nœud Webhook | Reçoit chaque échange |
 | Mise en ligne | Docker + Railway | Met ton agent sur internet |
 | Configuration | python-dotenv + YAML | Clés API et réglages |
 
@@ -355,7 +400,9 @@ appelle seulement `fournisseur.verifier_signature()`, `fournisseur.analyser_webh
 
 ## Ce que ce kit apporte
 
-- **Tout est en français** : le guide, les dix questions, le code généré, ses commentaires
+- **Le passage à un humain** : alerte Telegram et pause de l'agent sur la conversation.
+- **Le pont n8n** : chaque échange part vers tes workflows.
+- **Tout est en français** : le guide, les douze questions, le code généré, ses commentaires
   et ses noms de variables.
 - **L'agent parle à tes clients en français**, et les vouvoie par défaut.
 - **Les exemples sont adaptés** : euros, horaires à la française, numéros en +33.
@@ -365,10 +412,14 @@ appelle seulement `fournisseur.verifier_signature()`, `fournisseur.analyser_webh
   si tu préfères ne pas l'écrire dans la conversation.
 - **La commande s'appelle `/creer-agent`**.
 
-**Ce qui a été vérifié.** L'audit du kit passe : les neuf fichiers de code du guide
+**Ce qui a été vérifié.** L'audit du kit passe : les onze fichiers de code du guide
 compilent, le YAML se lit, les variables d'environnement sont toutes documentées. L'agent
 généré a ensuite été essayé de bout en bout avec les deux fournisseurs, sans réseau, avec
-un faux Claude et un faux WhatsApp : signature, doublons, mémoire, panne de Claude.
+un faux Claude, un faux WhatsApp, un faux n8n et un faux Telegram : signature, doublons,
+mémoire, panne de Claude, alerte, pause et reprise, pannes de n8n et de Telegram, aucun
+secret dans les journaux. 44 vérifications par fournisseur.
+
+**Statut : testé en simulation.** Le premier lancement avec de vrais comptes reste à faire.
 
 ---
 
@@ -399,8 +450,9 @@ d'écrire, ce n'est jamais un problème en pratique.
 **Que deviennent mes données ?**
 Tout tourne chez toi : ton serveur, ta base de données, tes clés API. AgentKit n'a ni
 serveur à lui ni télémétrie. En revanche, les messages passent par ton fournisseur WhatsApp
-et par l'API d'Anthropic, et ton agent garde les conversations de tes clients : le RGPD
-te concerne. Le guide t'en parle au moment de la mise en production.
+et par l'API d'Anthropic, et aussi par Telegram et n8n si tu actives ces options. Ton agent
+garde les conversations de tes clients : le RGPD te concerne. Le guide t'en parle au moment
+de la mise en production.
 
 ---
 
@@ -421,8 +473,8 @@ d'environnement sont documentées et que les liens du README répondent.
 
 **Elie LISSODA** · [elie.koudujob.com](https://elie.koudujob.com)
 
-Basé sur un kit open source publié sous licence MIT. Les mentions d'origine sont dans le
-fichier [LICENSE](LICENSE).
+Le passage à un humain et le pont n8n sont de moi. Le reste est basé sur un kit open source
+publié sous licence MIT : les mentions d'origine sont dans le fichier [LICENSE](LICENSE).
 
 Construit avec [Claude Code](https://claude.com/claude-code).
 

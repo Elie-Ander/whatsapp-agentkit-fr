@@ -309,7 +309,7 @@
       </div>
 
       <p class="mono rise" style="animation-delay:.32s; margin-top:26px; font-size:12px; color:var(--muted); letter-spacing:.03em">
-        Pas besoin de savoir programmer. Il suffit de répondre à 10 questions sur ton entreprise.
+        Pas besoin de savoir programmer. Il suffit de répondre à 12 questions sur ton entreprise.
       </p>
     </div>
 
@@ -365,7 +365,7 @@ bash start.sh">copier</button>
     </div>
     <div>
       <div class="k">Questions</div>
-      <div class="v">10</div>
+      <div class="v">12</div>
     </div>
     <div>
       <div class="k">Code que tu écris</div>
@@ -423,7 +423,7 @@ bash start.sh">copier</button>
         <div class="panel" style="flex:1; padding:20px 22px">
           <h3 style="font-size:21px">Il te pose ses questions</h3>
           <p class="lead" style="font-size:15.5px; margin-top:10px">
-            Dix questions, une à la fois, en français : le nom de ton entreprise, ce qu'elle fait, à quoi doit servir l'agent, le nom et le ton que tu lui donnes, tes horaires, tes fichiers, tes clés API. Si tu as un PDF avec ta carte ou ta grille de prix, tu le déposes dans <span class="mono" style="color:var(--bone); font-size:14px">/knowledge</span> et il le lit.
+            Douze questions, une à la fois, en français : le nom de ton entreprise, ce qu'elle fait, à quoi doit servir l'agent, le nom et le ton que tu lui donnes, tes horaires, tes fichiers, tes clés API, et si tu veux être prévenu quand l'agent passe la main. Si tu as un PDF avec ta carte ou ta grille de prix, tu le déposes dans <span class="mono" style="color:var(--bone); font-size:14px">/knowledge</span> et il le lit.
           </p>
           <div class="flex flex-wrap gap-2" style="margin-top:14px">
             <span class="badge">Nom</span><span class="badge">Activité</span><span class="badge">Cas d'usage</span>
@@ -448,6 +448,8 @@ bash start.sh">copier</button>
             agent/main.py<span style="color:var(--muted); opacity:.6"> &middot; serveur FastAPI + webhook</span><br>
             agent/brain.py<span style="opacity:.6"> &middot; API Claude + system prompt</span><br>
             agent/memory.py<span style="opacity:.6"> &middot; historique par numéro</span><br>
+            agent/humain.py<span style="opacity:.6"> &middot; passage à un humain</span><br>
+            agent/n8n.py<span style="opacity:.6"> &middot; pont vers n8n</span><br>
             agent/tools.py<span style="opacity:.6"> &middot; outils de ton métier</span><br>
             agent/providers/<span style="opacity:.6"> &middot; connexion à WhatsApp</span><br>
             config/prompts.yaml<span style="opacity:.6"> &middot; la personnalité</span><br>
@@ -770,7 +772,7 @@ bash start.sh">copier</button>
         L'important : l'agent qui en sort est à toi. Il vit sur ta machine, dans ton dépôt, avec tes clés API. Tu peux le lire, le casser, changer son prompt à trois heures du matin. Pas de plateforme au milieu, pas d'abonnement, rien qui s'éteigne si l'auteur disparaît. Licence MIT, fais-en ce que tu veux.
       </p>
       <p class="lead">
-        Je m'appelle <span style="color:var(--bone)">Elie LISSODA</span>. J'ai adapté ce kit open source en français pour que les indépendants et les petites entreprises francophones puissent s'en servir. Un souci pour l'installer, ou une question ? Je suis disponible 😉
+        Je m'appelle <span style="color:var(--bone)">Elie LISSODA</span>. J'ai adapté ce kit open source en français, et j'y ai ajouté le passage à un humain et le pont vers n8n, pour que les indépendants et les petites entreprises francophones puissent s'en servir. Un souci pour l'installer, ou une question ? Je suis disponible 😉
       </p>
 
       <div class="flex flex-wrap gap-3" style="margin-top:8px">

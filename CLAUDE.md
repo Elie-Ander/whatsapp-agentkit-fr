@@ -38,6 +38,8 @@ Quand tu génères l'agent, utilise TOUJOURS ces technologies :
 | WhatsApp | Zernio / Meta Cloud API | L'utilisateur choisit pendant la configuration |
 | Base de données | SQLite (local) / PostgreSQL (prod) | Via SQLAlchemy |
 | Variables | python-dotenv | Ne JAMAIS écrire une clé en dur |
+| Alertes | Bot Telegram | Optionnel : prévient le responsable quand l'agent passe la main |
+| Automatisation | n8n (nœud Webhook) | Optionnel : reçoit chaque échange pour alimenter un CRM, un tableur, Notion |
 | Conteneurs | Docker Compose | Pour la production |
 | Déploiement | Railway | Tu connectes le dépôt GitHub et Railway le lance |
 
@@ -155,7 +157,9 @@ agentkit/
 │   ├── __init__.py        ← Initialisation du paquet
 │   ├── main.py            ← Application FastAPI + webhook (indépendant du fournisseur)
 │   ├── brain.py           ← Connexion à l'API Claude + system prompt lu dans prompts.yaml
-│   ├── memory.py          ← SQLAlchemy : historique par téléphone + déduplication des événements
+│   ├── memory.py          ← SQLAlchemy : historique par téléphone, déduplication, conversations en pause
+│   ├── n8n.py             ← Pont vers n8n : envoie chaque échange à un workflow (optionnel)
+│   ├── humain.py          ← Passage à un humain : alerte du responsable + pause de l'agent (optionnel)
 │   ├── tools.py           ← Outils propres à l'entreprise de l'utilisateur
 │   └── providers/
 │       ├── __init__.py    ← Fabrique : obtenir_fournisseur() selon le .env
@@ -191,6 +195,8 @@ memory.py : cet événement a-t-il déjà été traité ? si oui, on l'écarte
     ↓
 main.py : répond 200 TOUT DE SUITE et met le travail en file d'attente, en arrière-plan
     ↓ ─────────────── (hors du cycle du webhook) ───────────────
+memory.py : une personne a-t-elle repris cette conversation ? si oui, l'agent se tait
+    ↓
 memory.py : récupère l'historique de cette conversation
     ↓
 brain.py : appelle Claude avec system prompt + historique + nouveau message
@@ -198,6 +204,9 @@ brain.py : appelle Claude avec system prompt + historique + nouveau message
 providers/ : envoie la réponse par le fournisseur choisi
     ↓
 WhatsApp (le client reçoit la réponse)
+    ↓ ─────────────── (une fois le client servi) ───────────────
+humain.py : si l'agent passe la main, prévient le responsable et met l'agent en pause
+n8n.py : sinon, envoie l'échange au workflow n8n (si le pont est configuré)
 ```
 
 **Où `tools.py` intervient, et où il n'intervient pas.** Les informations de l'entreprise
@@ -217,6 +226,31 @@ environ. Appeler Claude prend plus de temps que ça. Si l'agent traite avant de 
 fournisseur croit que le webhook a échoué et renvoie le même événement, jusqu'à 7 fois, et
 le client finit par recevoir plusieurs fois la même réponse. D'où la règle : **répondre
 d'abord, travailler ensuite**, et dédupliquer par id d'événement.
+
+### Passage à un humain et pont n8n
+
+Ces deux fonctions sont optionnelles. Leurs fichiers (`humain.py`, `n8n.py`) sont toujours
+générés, mais ils ne font rien tant que leurs variables ne sont pas dans le `.env`.
+
+**Passage à un humain.** Quand l'agent ne peut pas répondre, ou que le client demande une
+personne, il le dit au client et termine sa réponse par la balise `[HUMAIN]`. Le code
+retire la balise avant l'envoi, prévient le responsable, puis met l'agent en pause sur
+cette conversation (12 heures par défaut, `PAUSE_HUMAIN_HEURES`), le temps que le
+responsable réponde lui-même depuis la boîte de réception de son fournisseur. Les autres
+conversations continuent normalement.
+
+L'agent n'a le droit de passer la main que si quelqu'un peut être prévenu : par un bot
+Telegram (`TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID`) ou par n8n. Sans l'un des deux, la
+consigne n'est même pas ajoutée au system prompt. Et si l'alerte échoue, l'agent ne se met
+pas en pause : mieux vaut un agent qui répond encore qu'un client laissé sans personne.
+
+**Pont n8n.** Si `N8N_WEBHOOK_URL` est renseignée, l'agent envoie chaque échange au nœud
+Webhook d'un workflow n8n, après avoir répondu au client. Si n8n est en panne, le client ne
+le voit pas : l'échec est seulement écrit dans les journaux.
+
+Attention au cas « n8n sans Telegram » : c'est alors le workflow n8n qui doit alerter le
+responsable, en traitant l'événement `demande_humain`. Si l'utilisateur ne veut pas s'en
+occuper, règle `PAUSE_HUMAIN_HEURES=0` : l'agent continuera de répondre.
 
 ---
 
@@ -392,6 +426,44 @@ QUESTION 10 : [Dépend de la réponse à la QUESTION 9]
 
              NOTE : Si l'utilisateur veut d'abord tester sans vrai WhatsApp, il peut laisser
                     les identifiants vides et tout essayer avec test_local.py.
+
+QUESTION 11 : Quand l'agent ne sait pas répondre, ou qu'un client demande à parler à
+              quelqu'un, veux-tu être prévenu pour reprendre la conversation toi-même ?
+
+             Si OUI → Le plus simple est une alerte Telegram, gratuite :
+                      1. Dans Telegram, écris à @BotFather, envoie /newbot et suis les étapes
+                      2. Il te donne un jeton, du type 123456789:AA... C'est un secret :
+                         colle-le ici, ou mets-le toi-même dans le .env après TELEGRAM_BOT_TOKEN=
+                      3. Envoie un premier message à ton nouveau bot (n'importe lequel)
+                      4. Ouvre dans ton navigateur :
+                         https://api.telegram.org/bot<TON_JETON>/getUpdates
+                         Ton identifiant est le nombre après "chat":{"id":
+                         → il va dans TELEGRAM_CHAT_ID
+
+                      Après l'alerte, l'agent se tait 12 heures sur cette conversation pour te
+                      laisser répondre. Tu peux changer cette durée (PAUSE_HUMAIN_HEURES).
+
+             Si NON → L'agent répond seul, comme avant. On pourra l'ajouter plus tard.
+
+QUESTION 12 : Utilises-tu n8n ?
+
+             Si OUI → L'agent peut envoyer chaque échange à un de tes workflows, pour
+                      remplir un CRM, un Google Sheets ou Notion :
+                      1. Dans n8n, crée un workflow qui commence par un nœud Webhook,
+                         méthode POST
+                      2. Conseillé : Authentication = Header Auth, avec le nom
+                         X-AgentKit-Secret et une valeur secrète que tu inventes
+                      3. Copie la « Production URL » du nœud → N8N_WEBHOOK_URL
+                         et ta valeur secrète → N8N_WEBHOOK_SECRET
+                      4. Active le workflow
+
+                      S'il n'a PAS configuré Telegram à la question 11, préviens-le :
+                      « Sans Telegram, c'est ton workflow n8n qui doit t'alerter quand l'agent
+                      passe la main : il reçoit alors l'événement demande_humain. Veux-tu que
+                      ton workflow s'en charge ? » S'il répond non, écris PAUSE_HUMAIN_HEURES=0
+                      dans le .env.
+
+             Si NON → On passe. Le pont s'ajoute plus tard en deux lignes dans le .env.
 ```
 
 **À la fin de l'entretien :**
@@ -410,6 +482,10 @@ Avec TOUTES les réponses de l'entretien, génère ces fichiers.
 
 **Règle clé :** génère UNIQUEMENT l'adaptateur du fournisseur que l'utilisateur a choisi.
 S'il a choisi Zernio, n'écris pas `meta.py`, et inversement.
+
+`agent/n8n.py` et `agent/humain.py`, eux, sont TOUJOURS générés tels quels, même si
+l'utilisateur a répondu non aux questions 11 et 12 : sans leurs variables dans le `.env`,
+ils ne font rien, et `main.py` reste le même pour tout le monde.
 
 #### 3.1 : `config/business.yaml`
 
@@ -1006,14 +1082,17 @@ from fastapi import BackgroundTasks, FastAPI, HTTPException, Request
 from fastapi.responses import PlainTextResponse
 
 from agent.brain import generer_reponse, obtenir_message_erreur
+from agent.humain import passer_la_main, relais_actif
 from agent.memory import (
     enregistrer_message,
+    est_en_pause,
     initialiser_db,
     liberer_evenement,
     marquer_evenement_traite,
     nettoyer_anciens_evenements,
     obtenir_historique,
 )
+from agent.n8n import envoyer_a_n8n, pont_actif
 from agent.providers import obtenir_fournisseur
 from agent.providers.base import MessageEntrant
 
@@ -1031,6 +1110,9 @@ logger = logging.getLogger("agentkit")
 # Mettre le niveau racine en DEBUG remplit le terminal du bruit d'aiosqlite et de httpx
 # et rend illisible ce que l'agent a fait.
 logger.setLevel(logging.DEBUG if ENVIRONMENT == "development" else logging.INFO)
+# httpx écrit chaque adresse appelée dans les journaux. Celles de Telegram et de n8n
+# contiennent un secret (jeton du bot, adresse du webhook) : on ne garde que ses avertissements.
+logging.getLogger("httpx").setLevel(logging.WARNING)
 
 PORT = int(os.getenv("PORT", "8000"))
 
@@ -1070,6 +1152,11 @@ async def lifespan(app: FastAPI):
     else:
         logger.error(f"Fournisseur WhatsApp NON configuré : {erreur_configuration}")
 
+    logger.info(
+        f"Passage à un humain : {'actif' if relais_actif() else 'inactif'}, "
+        f"pont n8n : {'actif' if pont_actif() else 'inactif'}"
+    )
+
     yield
 
 
@@ -1089,6 +1176,8 @@ async def health_check():
         "service": "agentkit",
         "fournisseur": fournisseur.__class__.__name__ if fournisseur else None,
         "connexion": etat_fournisseur,
+        "passage_humain": relais_actif(),
+        "pont_n8n": pont_actif(),
     }
 
 
@@ -1161,13 +1250,19 @@ async def traiter_message(msg: MessageEntrant):
     traités dans l'ordre, pas en parallèle, pour que l'historique ne se mélange pas.
     """
     evenement_id = msg.contexte.get("evenement_id") or msg.message_id
+    echange = None  # ce qui partira vers n8n une fois le client servi
 
     async with _verrous[msg.telephone]:
         try:
+            # Une personne a repris cette conversation : l'agent se tait jusqu'à la fin de la pause
+            if await est_en_pause(msg.telephone):
+                logger.info(f"Conversation avec {msg.telephone} en pause : une personne a la main")
+                return
+
             # L'historique est lu AVANT d'enregistrer le message en cours : brain.py ajoute
             # le nouveau message à la fin, et comme ça il n'est pas en double.
             historique = await obtenir_historique(msg.telephone)
-            reponse, est_vraie_reponse = await generer_reponse(msg.texte, historique)
+            reponse, est_vraie_reponse, demande_humain = await generer_reponse(msg.texte, historique)
 
             envoye = await fournisseur.envoyer_message(msg.telephone, reponse, msg.contexte)
 
@@ -1189,6 +1284,17 @@ async def traiter_message(msg: MessageEntrant):
 
             logger.info(f"Réponse envoyée à {msg.telephone} : {reponse}")
 
+            if demande_humain:
+                # Le client a sa réponse : on prévient le responsable et l'agent se met en pause.
+                # C'est fait sous le verrou, pour que le message suivant voie déjà la pause.
+                await passer_la_main(msg.telephone, msg.texte, reponse)
+            elif est_vraie_reponse:
+                echange = {
+                    "telephone": msg.telephone,
+                    "message_client": msg.texte,
+                    "reponse_agent": reponse,
+                }
+
         except Exception as e:  # noqa: BLE001
             logger.exception(f"Erreur pendant le traitement du message de {msg.telephone} : {e}")
             await liberer_evenement(evenement_id)
@@ -1196,6 +1302,10 @@ async def traiter_message(msg: MessageEntrant):
                 await fournisseur.envoyer_message(msg.telephone, obtenir_message_erreur(), msg.contexte)
             except Exception:  # noqa: BLE001
                 logger.error("Impossible aussi de prévenir le client de l'erreur")
+
+    # Hors du verrou : n8n ne doit jamais faire attendre le message suivant du client
+    if echange and pont_actif():
+        await envoyer_a_n8n("echange", echange)
 ```
 
 #### 3.8 : `agent/brain.py`
@@ -1215,6 +1325,8 @@ import os
 import yaml
 from anthropic import AsyncAnthropic
 from dotenv import load_dotenv
+
+from agent.humain import CONSIGNE_HUMAIN, MESSAGE_RELAIS, relais_actif, separer_balise
 
 load_dotenv()
 logger = logging.getLogger("agentkit")
@@ -1301,7 +1413,7 @@ def _est_erreur_effort(erreur: Exception) -> bool:
     return "output_config" in texte or "effort" in texte
 
 
-async def generer_reponse(message: str, historique: list[dict]) -> tuple[str, bool]:
+async def generer_reponse(message: str, historique: list[dict]) -> tuple[str, bool, bool]:
     """
     Génère une réponse avec Claude.
 
@@ -1310,22 +1422,28 @@ async def generer_reponse(message: str, historique: list[dict]) -> tuple[str, bo
         historique: les messages précédents, [{"role": "user"|"assistant", "content": "..."}]
 
     Returns:
-        (texte, est_vraie_reponse)
+        (texte, est_vraie_reponse, demande_humain)
 
         "est_vraie_reponse" vaut False quand ce qu'on renvoie est un avertissement
         technique (erreur ou repli) et pas une réponse de l'agent. main.py s'en sert pour
         ne pas garder ces avertissements dans l'historique : s'ils y restaient, ils
         pollueraient le contexte de tous les messages suivants.
+
+        "demande_humain" vaut True quand l'agent passe la main : il ne sait pas répondre,
+        ou le client veut parler à une personne. main.py prévient alors le responsable.
     """
     global _accepte_effort
 
     if not message or len(message.strip()) < 2:
-        return obtenir_message_repli(), False
+        return obtenir_message_repli(), False, False
 
     messages = [{"role": m["role"], "content": m["content"]} for m in historique]
     messages.append({"role": "user", "content": message})
 
     system_prompt = charger_system_prompt()
+    if relais_actif():
+        # La consigne n'est ajoutée que si quelqu'un peut être prévenu (Telegram ou n8n)
+        system_prompt += "\n\n" + CONSIGNE_HUMAIN
     extras = {"output_config": {"effort": EFFORT}} if (_accepte_effort and EFFORT) else {}
 
     async def _appeler(parametres_extra: dict):
@@ -1349,10 +1467,10 @@ async def generer_reponse(message: str, historique: list[dict]) -> tuple[str, bo
                 reponse = await _appeler({})
             except Exception as e2:  # noqa: BLE001
                 logger.error(f"Erreur lors de l'appel à Claude : {e2}")
-                return obtenir_message_erreur(), False
+                return obtenir_message_erreur(), False, False
         else:
             logger.error(f"Erreur lors de l'appel à Claude : {e}")
-            return obtenir_message_erreur(), False
+            return obtenir_message_erreur(), False, False
 
     if getattr(reponse, "stop_reason", None) == "max_tokens":
         logger.warning(
@@ -1363,13 +1481,17 @@ async def generer_reponse(message: str, historique: list[dict]) -> tuple[str, bo
     texte = _extraire_texte(reponse)
     if not texte:
         logger.warning("Claude a renvoyé une réponse sans texte")
-        return obtenir_message_repli(), False
+        return obtenir_message_repli(), False, False
+
+    texte, demande_humain = separer_balise(texte)
+    if demande_humain and not texte:
+        texte = MESSAGE_RELAIS  # l'agent n'a écrit que la balise
 
     logger.info(
         f"Réponse générée avec {MODELE} "
         f"({reponse.usage.input_tokens} in / {reponse.usage.output_tokens} out)"
     )
-    return texte, True
+    return texte, True, demande_humain
 ```
 
 #### 3.9 : `agent/memory.py`
@@ -1379,8 +1501,8 @@ async def generer_reponse(message: str, historique: list[dict]) -> tuple[str, bo
 # Généré par AgentKit
 
 """
-Garde l'historique de chaque conversation par numéro de téléphone, et tient le registre
-des événements de webhook déjà traités.
+Garde l'historique de chaque conversation par numéro de téléphone, tient le registre des
+événements de webhook déjà traités, et retient les conversations qu'une personne a reprises.
 
 SQLite en local, PostgreSQL en production.
 """
@@ -1453,6 +1575,19 @@ class EvenementTraite(Base):
 
     evenement_id: Mapped[str] = mapped_column(String(200), primary_key=True)
     cree_le: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=maintenant, index=True)
+
+
+class ConversationEnPause(Base):
+    """
+    Conversations où l'agent se tait parce qu'une personne a repris la main.
+
+    Passé l'heure indiquée, l'agent recommence à répondre.
+    """
+
+    __tablename__ = "conversations_en_pause"
+
+    telephone: Mapped[str] = mapped_column(String(50), primary_key=True)
+    jusqu_a: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
 
 async def initialiser_db():
@@ -1546,9 +1681,275 @@ async def effacer_historique(telephone: str):
     async with async_session() as session:
         await session.execute(delete(Message).where(Message.telephone == telephone))
         await session.commit()
+
+
+async def mettre_en_pause(telephone: str, heures: float):
+    """L'agent ne répond plus à cette conversation pendant N heures."""
+    async with async_session() as session:
+        await session.merge(
+            ConversationEnPause(telephone=telephone, jusqu_a=maintenant() + timedelta(hours=heures))
+        )
+        await session.commit()
+
+
+async def est_en_pause(telephone: str) -> bool:
+    """
+    True si une personne a la main sur cette conversation.
+
+    Les dates sont comparées dans la base, pas en Python : SQLite rend des dates sans
+    fuseau horaire, et les comparer ici à maintenant() lèverait une erreur.
+    """
+    async with async_session() as session:
+        resultat = await session.execute(
+            select(ConversationEnPause).where(
+                ConversationEnPause.telephone == telephone,
+                ConversationEnPause.jusqu_a > maintenant(),
+            )
+        )
+        return resultat.scalars().first() is not None
+
+
+async def lever_pause(telephone: str):
+    """Rend la main à l'agent sur cette conversation."""
+    async with async_session() as session:
+        await session.execute(
+            delete(ConversationEnPause).where(ConversationEnPause.telephone == telephone)
+        )
+        await session.commit()
 ```
 
-#### 3.10 : `agent/tools.py`
+#### 3.10 : `agent/n8n.py` (toujours généré)
+
+Sans `N8N_WEBHOOK_URL` dans le `.env`, ce fichier ne fait rien.
+
+```python
+# agent/n8n.py : pont vers n8n
+# Généré par AgentKit
+
+"""
+Envoie les événements de l'agent à un workflow n8n, par son nœud Webhook.
+
+À partir de là, n8n fait le reste : remplir un Google Sheets ou un CRM, créer une fiche
+Notion, prévenir une équipe. Le pont est optionnel : sans N8N_WEBHOOK_URL, il ne fait rien.
+"""
+
+import logging
+import os
+from datetime import datetime, timezone
+
+import httpx
+
+logger = logging.getLogger("agentkit")
+
+
+def pont_actif() -> bool:
+    """True si l'adresse d'un webhook n8n est configurée."""
+    return bool(os.getenv("N8N_WEBHOOK_URL", "").strip())
+
+
+async def envoyer_a_n8n(evenement: str, donnees: dict) -> bool:
+    """
+    Envoie un événement à n8n. Renvoie True si n8n l'a accepté.
+
+    Ne lève jamais d'exception : si n8n est en panne, l'agent doit continuer à répondre
+    à ses clients. L'échec est seulement écrit dans les journaux.
+    """
+    url = os.getenv("N8N_WEBHOOK_URL", "").strip()
+    if not url:
+        return False
+
+    headers = {"Content-Type": "application/json"}
+    secret = os.getenv("N8N_WEBHOOK_SECRET", "").strip()
+    if secret:
+        # Côté n8n : nœud Webhook, Authentication = Header Auth, avec ce même nom d'en-tête
+        headers["X-AgentKit-Secret"] = secret
+
+    charge = {
+        "evenement": evenement,
+        "date": datetime.now(timezone.utc).isoformat(),
+        **donnees,
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            r = await client.post(url, json=charge, headers=headers)
+    except httpx.HTTPError as e:
+        # On n'écrit que le type de l'erreur : son texte peut contenir l'adresse du webhook
+        logger.warning(f"n8n injoignable, événement « {evenement} » non transmis : {type(e).__name__}")
+        return False
+
+    if r.status_code >= 400:
+        logger.warning(f"n8n a refusé l'événement « {evenement} » [{r.status_code}] : {r.text[:200]}")
+        return False
+    return True
+```
+
+L'agent envoie deux événements, toujours en JSON :
+
+| `evenement` | Quand | Champs |
+|---|---|---|
+| `echange` | Après chaque réponse de l'agent | `date`, `telephone`, `message_client`, `reponse_agent` |
+| `demande_humain` | Quand l'agent passe la main | les mêmes, plus `pause_heures` |
+
+#### 3.11 : `agent/humain.py` (toujours généré)
+
+Sans `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID`, ni `N8N_WEBHOOK_URL`, l'agent ne passe jamais
+la main : il n'annonce pas au client une personne qui ne serait pas prévenue.
+
+```python
+# agent/humain.py : passage à un humain
+# Généré par AgentKit
+
+"""
+Quand l'agent ne sait pas répondre, ou que le client demande une personne, il passe la
+main : il prévient le responsable (Telegram, n8n) et se met en pause sur cette conversation.
+
+L'agent le signale en terminant sa réponse par la balise [HUMAIN]. La consigne est ajoutée
+au system prompt par brain.py, pour que la balise soit définie à un seul endroit : ici.
+"""
+
+import logging
+import os
+import re
+
+import httpx
+
+from agent.memory import mettre_en_pause
+from agent.n8n import envoyer_a_n8n, pont_actif
+
+logger = logging.getLogger("agentkit")
+
+BALISE_HUMAIN = "[HUMAIN]"
+_MOTIF_BALISE = re.compile(r"\[\s*HUMAIN\s*\]", re.IGNORECASE)
+
+CONSIGNE_HUMAIN = (
+    "## Passer la main à une personne\n"
+    "Si tu ne peux pas répondre avec les informations que tu as, ou si le client demande à "
+    "parler à une personne, dis-lui simplement qu'un membre de l'équipe va reprendre la "
+    f"conversation, puis termine ton message par {BALISE_HUMAIN} seul sur la dernière ligne. "
+    "N'écris jamais cette balise dans un autre cas, et ne l'explique jamais au client."
+)
+
+MESSAGE_RELAIS = "Je transmets votre demande à une personne de l'équipe, qui vous répondra dès que possible."
+
+
+def telegram_actif() -> bool:
+    """True si le bot Telegram d'alerte est configuré."""
+    return bool(os.getenv("TELEGRAM_BOT_TOKEN", "").strip() and os.getenv("TELEGRAM_CHAT_ID", "").strip())
+
+
+def relais_actif() -> bool:
+    """
+    True si l'agent a le droit de passer la main.
+
+    Il ne l'a que si quelqu'un peut être prévenu : sinon il annoncerait au client une
+    personne qui ne viendra jamais.
+    """
+    return telegram_actif() or pont_actif()
+
+
+def heures_de_pause() -> float:
+    """Durée du silence de l'agent après avoir passé la main. 0 = il continue à répondre."""
+    try:
+        return max(0.0, float(os.getenv("PAUSE_HUMAIN_HEURES") or "12"))
+    except ValueError:
+        logger.warning("PAUSE_HUMAIN_HEURES n'est pas un nombre : 12 heures par défaut")
+        return 12.0
+
+
+def separer_balise(texte: str) -> tuple[str, bool]:
+    """Retire la balise de la réponse. Renvoie (texte_pour_le_client, demande_humain)."""
+    if not _MOTIF_BALISE.search(texte):
+        return texte, False
+    return _MOTIF_BALISE.sub("", texte).strip(), True
+
+
+def _numero_lisible(telephone: str) -> str:
+    """Remet le "+" devant un numéro. Un identifiant Meta sans numéro reste tel quel."""
+    return f"+{telephone}" if telephone.isdigit() else telephone
+
+
+async def _alerter_par_telegram(texte: str) -> bool:
+    """Envoie l'alerte par le bot Telegram. Renvoie True si Telegram l'a acceptée."""
+    jeton = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            r = await client.post(
+                f"https://api.telegram.org/bot{jeton}/sendMessage",
+                json={"chat_id": os.getenv("TELEGRAM_CHAT_ID", "").strip(), "text": texte},
+            )
+    except httpx.HTTPError as e:
+        # On n'écrit que le type de l'erreur : son texte peut contenir l'URL, donc le jeton
+        logger.error(f"Alerte Telegram impossible : {type(e).__name__}")
+        return False
+
+    if r.status_code != 200:
+        logger.error(f"Telegram a refusé l'alerte [{r.status_code}] : {r.text[:200]}")
+        return False
+    return True
+
+
+async def alerter_responsable(telephone: str, message_client: str, reponse_agent: str) -> bool:
+    """
+    Prévient le responsable par tous les canaux configurés.
+    Renvoie True si au moins une alerte est partie.
+    """
+    heures = heures_de_pause()
+    prevenu = False
+
+    if telegram_actif():
+        if heures > 0:
+            suite = f"L'agent se tait {heures:g} h sur cette conversation : à toi de répondre."
+        else:
+            suite = "L'agent continue de répondre sur cette conversation."
+        texte = (
+            "Un client attend une réponse humaine\n\n"
+            f"Téléphone : {_numero_lisible(telephone)}\n"
+            f"Son message : {message_client[:500]}\n"
+            f"Réponse de l'agent : {reponse_agent[:500]}\n\n"
+            f"{suite}"
+        )
+        prevenu = await _alerter_par_telegram(texte)
+
+    if pont_actif():
+        transmis = await envoyer_a_n8n(
+            "demande_humain",
+            {
+                "telephone": telephone,
+                "message_client": message_client,
+                "reponse_agent": reponse_agent,
+                "pause_heures": heures,
+            },
+        )
+        prevenu = prevenu or transmis
+
+    return prevenu
+
+
+async def passer_la_main(telephone: str, message_client: str, reponse_agent: str) -> bool:
+    """
+    Prévient le responsable, puis met l'agent en pause sur cette conversation.
+
+    Ne lève jamais d'exception : le client a déjà reçu sa réponse, une alerte ratée ne doit
+    pas lui en envoyer une deuxième. Si personne n'a pu être prévenu, l'agent ne se met pas
+    en pause : mieux vaut un agent qui répond encore qu'un client laissé sans personne.
+    """
+    try:
+        if not await alerter_responsable(telephone, message_client, reponse_agent):
+            logger.error(f"Personne n'a pu être prévenu pour {telephone} : l'agent reste actif")
+            return False
+
+        heures = heures_de_pause()
+        if heures > 0:
+            await mettre_en_pause(telephone, heures)
+            logger.info(f"L'agent passe la main pour {telephone} : en pause {heures:g} h")
+        return True
+    except Exception as e:  # noqa: BLE001
+        logger.error(f"Le passage à un humain a échoué pour {telephone} : {type(e).__name__}")
+        return False
+```
+
+#### 3.12 : `agent/tools.py`
 
 Génère des outils SPÉCIFIQUES selon les cas d'usage choisis par l'utilisateur.
 Pars de ce modèle de base et ajoute les fonctions selon le cas :
@@ -1652,7 +2053,7 @@ def chercher_dans_knowledge(requete: str) -> str:
 
 Toujours ajouter un fichier `agent/__init__.py` vide et un `tests/__init__.py` vide.
 
-#### 3.11 : `tests/test_local.py`
+#### 3.13 : `tests/test_local.py`
 
 ```python
 # tests/test_local.py : simulateur de chat dans le terminal
@@ -1721,8 +2122,10 @@ async def main():
         historique = await obtenir_historique(TELEPHONE_TEST)
 
         print("\nAgent : ", end="", flush=True)
-        reponse, est_vraie_reponse = await generer_reponse(message, historique)
+        reponse, est_vraie_reponse, demande_humain = await generer_reponse(message, historique)
         print(reponse)
+        if demande_humain:
+            print("[L'agent passe la main : en production, le responsable serait prévenu]")
         print()
 
         # Comme en production : les avertissements techniques n'entrent pas dans l'historique
@@ -1735,11 +2138,13 @@ if __name__ == "__main__":
     asyncio.run(main())
 ```
 
-#### 3.12 : Fichiers d'infrastructure
+#### 3.14 : Fichiers d'infrastructure
 
 **`.env` (généré, ne va JAMAIS sur GitHub) :**
 
 Génère UNIQUEMENT les variables du fournisseur choisi. Celles de l'autre n'y vont pas, même en commentaire.
+Les blocs « Passage à un humain » et « Pont n8n » ne sont ajoutés que si l'utilisateur a
+répondu oui à la question 11 ou à la question 12.
 
 ```env
 # AgentKit : variables d'environnement
@@ -1769,6 +2174,16 @@ ZERNIO_ACCOUNT_ID=
 # META_VERIFY_TOKEN=agentkit-verify
 # META_APP_SECRET=
 # META_API_VERSION=v25.0
+
+# ── Passage à un humain (si oui à la question 11) ──────────
+TELEGRAM_BOT_TOKEN=123456789:AA...
+TELEGRAM_CHAT_ID=
+# Heures de silence de l'agent après l'alerte. 0 = il continue de répondre.
+PAUSE_HUMAIN_HEURES=12
+
+# ── Pont n8n (si oui à la question 12) ─────────────────────
+N8N_WEBHOOK_URL=https://ton-n8n/webhook/...
+N8N_WEBHOOK_SECRET=invente-un-autre-secret
 
 # ── Serveur ────────────────────────────────────────────────
 PORT=8000
@@ -1841,7 +2256,7 @@ docs/
 scripts/
 ```
 
-#### 3.13 : Fichiers de `/knowledge`
+#### 3.15 : Fichiers de `/knowledge`
 
 S'il y a des fichiers dans `/knowledge`, lis-les (txt, pdf, csv, md, json, docx) et extrais-en
 le contenu utile pour l'intégrer mot pour mot dans le system prompt de
@@ -1869,7 +2284,20 @@ Si un fichier est très gros, donne la priorité à ce qu'un client demanderait 
    Il doit répondre `{"status":"ok","service":"agentkit","fournisseur":"..."}`.
    S'il répond `{"status":"error"...}`, le champ `detail` dit exactement ce qui manque dans le `.env`.
 
-4. **Faire le point avec l'utilisateur :**
+4. **Si le passage à un humain ou le pont n8n sont configurés, les essayer pour de vrai :**
+   ```bash
+   python -c "import asyncio; from agent.humain import alerter_responsable; print(asyncio.run(alerter_responsable('33600000000', 'Message de test', 'Réponse de test')))"
+   ```
+   La commande doit afficher `True`, et l'utilisateur doit recevoir l'alerte sur Telegram
+   (ou voir arriver l'événement `demande_humain` dans son workflow n8n). Si elle affiche
+   `False`, la raison est écrite juste au-dessus : jeton refusé, identifiant de chat faux,
+   webhook n8n inactif.
+
+   Dans le simulateur, l'utilisateur peut aussi écrire « je veux parler à quelqu'un » :
+   l'agent doit annoncer qu'une personne reprend, et le simulateur affiche
+   `[L'agent passe la main : en production, le responsable serait prévenu]`.
+
+5. **Faire le point avec l'utilisateur :**
    ```
    Ton agent répond-il comme tu l'attendais ? (oui/non)
    ```
@@ -1877,7 +2305,7 @@ Si un fichier est très gros, donne la priorité à ce qu'un client demanderait 
    - Si **NON** : demander quoi ajuster, modifier `config/prompts.yaml` et recommencer
    - Si **OUI** : passer à la Phase 5
 
-5. **Afficher le message :**
+6. **Afficher le message :**
    ```
    Phase 4 terminée : agent testé et validé
 
@@ -2003,6 +2431,11 @@ Si un fichier est très gros, donne la priorité à ce qu'un client demanderait 
       Si ZERNIO : ZERNIO_API_KEY, ZERNIO_WEBHOOK_SECRET, ZERNIO_ACCOUNT_ID (optionnel)
       Si META :   META_ACCESS_TOKEN, META_PHONE_NUMBER_ID, META_VERIFY_TOKEN, META_APP_SECRET
 
+      Si tu as activé le passage à un humain :
+                  TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, PAUSE_HUMAIN_HEURES
+      Si tu as activé le pont n8n :
+                  N8N_WEBHOOK_URL, N8N_WEBHOOK_SECRET
+
    Étape 4 : Génère l'URL publique
 
       Railway ne donne PAS tout seul un domaine public à ton service. Il faut le demander :
@@ -2065,6 +2498,8 @@ Si un fichier est très gros, donne la priorité à ce qu'un client demanderait 
    - de dire à tes clients qu'ils parlent à un assistant automatique et que leurs messages sont conservés
    - d'effacer l'historique d'un client qui le demande (la fonction effacer_historique() de memory.py fait exactement ça)
    - de ne pas garder les conversations plus longtemps que nécessaire
+   - si tu as activé le pont n8n ou les alertes Telegram, de te souvenir que les messages
+     de tes clients partent aussi vers ces services
 
    Je ne suis pas juriste : pour les mentions à afficher et la durée de conservation,
    regarde le site de la CNIL (cnil.fr) ou demande à ton conseil habituel.
@@ -2083,12 +2518,14 @@ Si un fichier est très gros, donne la priorité à ce qu'un client demanderait 
    - Cerveau avec Claude ([MODÈLE])
    - Mémoire des conversations par client
    - Déduplication des événements : il ne répond jamais deux fois la même chose
+   - Passage à un humain : [ACTIF, alerte par Telegram / n8n, pause de N heures | NON CONFIGURÉ]
+   - Pont n8n : [ACTIF, chaque échange part vers ton workflow | NON CONFIGURÉ]
    - Outils de base dans tools.py : [CEUX QUE TU AS VRAIMENT ÉCRITS]
    - System prompt personnalisé pour ton entreprise
    - Docker Compose pour la production
 
    Fichiers générés :
-   - agent/main.py, brain.py, memory.py, tools.py, providers/
+   - agent/main.py, brain.py, memory.py, n8n.py, humain.py, tools.py, providers/
    - config/business.yaml, prompts.yaml
    - tests/test_local.py
    - Dockerfile, docker-compose.yml, .dockerignore, .env
@@ -2119,6 +2556,8 @@ Si un fichier est très gros, donne la priorité à ce qu'un client demanderait 
 11. **Valide à chaque phase** avant de passer à la suivante
 12. **Génère UNIQUEMENT l'adaptateur du fournisseur choisi**, pas les deux
 13. **Ne change pas le modèle de Claude de ton propre chef** pour économiser : c'est la décision de l'utilisateur
+14. **Génère `n8n.py` et `humain.py` tels quels, toujours** : ce sont leurs variables dans le `.env` qui les activent, pas le code
+15. **Ne recopie jamais un secret dans un message, un commentaire ou un journal** : jeton Telegram, adresse du webhook n8n, clés API
 
 ---
 
@@ -2170,6 +2609,15 @@ META_PHONE_NUMBER_ID=
 META_VERIFY_TOKEN=agentkit-verify
 META_APP_SECRET=
 META_API_VERSION=v25.0
+
+# ── Passage à un humain (optionnel) ───────────────────────
+TELEGRAM_BOT_TOKEN=                 # jeton donné par @BotFather
+TELEGRAM_CHAT_ID=                   # à qui envoyer l'alerte
+PAUSE_HUMAIN_HEURES=12              # silence de l'agent après l'alerte ; 0 = il continue
+
+# ── Pont n8n (optionnel) ──────────────────────────────────
+N8N_WEBHOOK_URL=                    # « Production URL » du nœud Webhook
+N8N_WEBHOOK_SECRET=                 # envoyé dans l'en-tête X-AgentKit-Secret
 
 # ── Serveur ───────────────────────────────────────────────
 PORT=8000
